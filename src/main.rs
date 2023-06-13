@@ -5,6 +5,7 @@ use windows::{
         Graphics::Gdi::*,
         System::LibraryLoader::GetModuleHandleA,
         UI::WindowsAndMessaging::*,
+        UI::Input::KeyboardAndMouse::VK_F4,
         Foundation::{RECT, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
         Media::timeBeginPeriod
     }
@@ -47,8 +48,6 @@ unsafe extern "system" fn win32_main_window_callback(
 ) -> LRESULT {
     match message {
         WM_NCCREATE => {
-            println!("CREATE");
-
             let cs = lparam.0 as *const CREATESTRUCTW;
             let this = (*cs).lpCreateParams as *mut Window;
             (*this).handle = window;
@@ -56,8 +55,6 @@ unsafe extern "system" fn win32_main_window_callback(
             SetWindowLongPtrA(window, GWLP_USERDATA, this as _);
         }
         WM_CLOSE | WM_DESTROY => {
-            println!("WM_CLOSE|WN_DESTROY");
-
             let this = GetWindowLongPtrA(window, GWLP_USERDATA) as *mut Window;
             if let Some(this) = this.as_mut() {
                 this.window_running = false;
@@ -68,8 +65,6 @@ unsafe extern "system" fn win32_main_window_callback(
         WM_KEYDOWN => println!("Keyboard input came in through a non-dispatch message"),
         WM_KEYUP => println!("Keyboard input came in through a non-dispatch message"),
         WM_PAINT => {
-            println!("WM_PAINT");
-
             let this = GetWindowLongPtrA(window, GWLP_USERDATA) as *mut Window;
             if let Some(this) = this.as_mut() {
                 let mut paint: PAINTSTRUCT = Default::default();
@@ -105,6 +100,21 @@ pub fn win32_process_pending_messages(window: &mut Window) {
                     println!("WM_RBUTTONUP");
                 }
                 WM_SYSKEYDOWN | WM_SYSKEYUP | WM_KEYDOWN | WM_KEYUP => {
+                    let v_k_code: char = char::from_u32(message.wParam.0 as u32)
+                        .expect("Failed to parse VKCode");
+
+                    let was_down = message.lParam.0 & (1 << 30) != 0;
+                    let is_down = (message.lParam.0 & (1 << 31)) == 0;
+                    let alt_key_was_down = message.lParam.0 & (1 << 29) != 0;
+
+                    if was_down != is_down {
+                        if is_down {
+                            if (v_k_code as u16 == VK_F4.0) && alt_key_was_down {
+                                println!("Alt+F4");
+                                window.window_running = false;
+                            }
+                        }
+                    }
                 }
                 _ => {
                     TranslateMessage(&message);
@@ -121,7 +131,6 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
     unsafe {
         let mut client_rect: RECT = Default::default();
         GetClientRect(window.handle, &mut client_rect);
-        //let device_context = ;
         let window_width = client_rect.right - client_rect.left;
         let window_height = client_rect.bottom - client_rect.top;
 
@@ -182,8 +191,6 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     let buffer_width = 500;
     let buffer_height = 500;
-    //let bytes_per_pixel: i32 = 4;
-    //let bitmap_memory_size: usize = ((buffer_width * buffer_height) * bytes_per_pixel) as usize;
     let mut buffer = Win32OffscreenBuffer {
         info: Default::default(),
         bits: Vec::new(),
@@ -220,8 +227,8 @@ fn main() -> Result<()>{
         refresh_rate: 60,
     });
 
-    let window_tmp = unsafe {
-        CreateWindowExA(
+    unsafe {
+        let window_tmp = CreateWindowExA(
             WS_EX_LEFT, // ms: WS_EX_NOREDIRECTIONBITMAP, hmh: 0
             WINDOW_CLASS_NAME,
             &s!("Space Drift"),
@@ -235,11 +242,14 @@ fn main() -> Result<()>{
             instance,
             Some(window.as_mut() as *mut _ as _),
         )
-        .ok()? //NOTE(Fermin): Consider removing this trait
-    };
-    unsafe { timeBeginPeriod(1); }
-    window.refresh_rate = unsafe { GetDeviceCaps(GetDC(window_tmp), VREFRESH) };
+        .ok()?;
+        timeBeginPeriod(1);
+        window.refresh_rate = GetDeviceCaps(GetDC(window_tmp), VREFRESH);
+    }
 
+    // --------------------------------------------------------------------
+    // NOTE(Fermin): Main loop
+    // --------------------------------------------------------------------
     while window.window_running {
         win32_process_pending_messages(window.as_mut());
     }
