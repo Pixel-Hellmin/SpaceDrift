@@ -83,22 +83,6 @@ pub fn win32_process_pending_messages(window: &mut Window) {
     unsafe {
         while PeekMessageA(&mut message, HWND(0), 0, 0, PM_REMOVE).into() {
             match message.message {
-                WM_MOUSEMOVE => {
-                }
-                // NOTE(Fermin): Consider following the same logic for
-                // mouse button than keyboard buttons
-                WM_LBUTTONDOWN => {
-                    println!("WM_LBUTTONDOWN");
-                }
-                WM_LBUTTONUP => {
-                    println!("WM_LBUTTONUP");
-                }
-                WM_RBUTTONDOWN => {
-                    println!("WM_RBUTTONDOWN");
-                }
-                WM_RBUTTONUP => {
-                    println!("WM_RBUTTONUP");
-                }
                 WM_SYSKEYDOWN | WM_SYSKEYUP | WM_KEYDOWN | WM_KEYUP => {
                     let v_k_code: char = char::from_u32(message.wParam.0 as u32)
                         .expect("Failed to parse VKCode");
@@ -133,26 +117,27 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
         GetClientRect(window.handle, &mut client_rect);
         let window_width = client_rect.right - client_rect.left;
         let window_height = client_rect.bottom - client_rect.top;
+        let padding = 10;
 
         PatBlt(
             device_context,
             0,
             0,
             window_width,
-            10,
+            padding,
             BLACKNESS,
         );
         PatBlt(
             device_context,
             0,
             0,
-            10,
+            padding,
             window_height,
             BLACKNESS,
         );
         PatBlt(
             device_context,
-            10 + window.buffer.width,
+            padding + window.buffer.width,
             0,
             window_width,
             window_height,
@@ -161,7 +146,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
         PatBlt(
             device_context,
             0,
-            10 + window.buffer.height,
+            padding + window.buffer.height,
             window_width,
             window_height,
             BLACKNESS,
@@ -169,8 +154,8 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
 
         StretchDIBits(
             device_context,
-            10,
-            10,
+            padding,
+            padding,
             window.buffer.width,
             window.buffer.height,
             0,
@@ -189,8 +174,8 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create buffer
     // --------------------------------------------------------------------
-    let buffer_width = 500;
-    let buffer_height = 500;
+    let buffer_width = 450;
+    let buffer_height = 600;
     let mut buffer = Win32OffscreenBuffer {
         info: Default::default(),
         bits: Vec::new(),
@@ -235,8 +220,8 @@ fn main() -> Result<()>{
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            buffer_width + 20,
-            buffer_height + 20,
+            buffer_width + 40,
+            buffer_height + 60,
             HWND(0),
             HMENU(0),
             instance,
