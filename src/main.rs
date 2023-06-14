@@ -12,11 +12,26 @@ use windows::{
 };
 
 const WINDOW_CLASS_NAME: PCSTR = s!("win32.Window");
+const DARK_BLUE: Color   = Color { r:   3, g:  38, b:  82, a: 255, };
+
+pub struct Color {
+    r: i32,
+    g: i32,
+    b: i32,
+    a: i32
+}
+impl Color {
+    fn get_i32(&self) -> i32 {
+        // NOTE(Fermin): Pixel -> BB GG RR AA
+        let result: i32 = (self.b << 24) | (self.g << 16) | (self.r << 8) | self.a;
+        result
+    }
+}
 
 pub struct Win32OffscreenBuffer {
     // Pixels always are 32-bits wide, Memory Order BB GG RR XX
     info: BITMAPINFO,
-    pub bits: Vec<i32>,
+    pub bits: Vec<u8>,
     pub width: i32,
     pub height: i32,
 }
@@ -125,7 +140,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
             0,
             window_width,
             padding,
-            BLACKNESS,
+            WHITENESS,
         );
         PatBlt(
             device_context,
@@ -133,7 +148,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
             0,
             padding,
             window_height,
-            BLACKNESS,
+            WHITENESS,
         );
         PatBlt(
             device_context,
@@ -141,7 +156,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
             0,
             window_width,
             window_height,
-            BLACKNESS,
+            WHITENESS,
         );
         PatBlt(
             device_context,
@@ -149,7 +164,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
             padding + window.buffer.height,
             window_width,
             window_height,
-            BLACKNESS,
+            WHITENESS,
         );
 
         StretchDIBits(
@@ -170,15 +185,20 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
     }
 }
 
+fn update_and_render(buffer: &mut Win32OffscreenBuffer) {
+}
+
 fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create buffer
     // --------------------------------------------------------------------
     let buffer_width = 450;
     let buffer_height = 600;
+    let bytes_per_pixel = 4;
+    let num_of_pixels:i32 = buffer_width * buffer_height * bytes_per_pixel;
     let mut buffer = Win32OffscreenBuffer {
         info: Default::default(),
-        bits: Vec::new(),
+        bits: vec![0; num_of_pixels as usize],
         width: buffer_width,
         height: buffer_height,
     };
@@ -237,6 +257,7 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     while window.window_running {
         win32_process_pending_messages(window.as_mut());
+        update_and_render(&mut window.buffer);
     }
 
     Ok(())
