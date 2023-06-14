@@ -1,3 +1,4 @@
+use std::time::{Duration, Instant};
 use windows::{
     core::{Result, Error, PCSTR},
     s,
@@ -292,9 +293,22 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Main loop
     // --------------------------------------------------------------------
+    let target_seconds_per_frame: f32 = 1.0 / window.refresh_rate as f32;
     while window.window_running {
+        let frame_start_instant = Instant::now();
+
         win32_process_pending_messages(window.as_mut());
         update_and_render(&mut window.buffer);
+
+        let target_ms_per_frame = (target_seconds_per_frame * 1000.0) as u128;
+        let time_elapsed_since_frame_start = frame_start_instant.elapsed().as_millis();
+        if time_elapsed_since_frame_start < target_ms_per_frame {
+            let ms_until_next_frame: u64 = (target_ms_per_frame - time_elapsed_since_frame_start)
+            .try_into()
+            .expect("Error calculating ms until next frame");
+            std::thread::sleep(Duration::from_millis(ms_until_next_frame));
+        }
+        //println!("{} ms/f", frame_start_instant.elapsed().as_millis());
     }
 
     Ok(())
