@@ -15,6 +15,7 @@ use windows::{
 
 const WINDOW_CLASS_NAME: PCSTR = s!("win32.Window");
 const BYTES_PER_PIXEL: i32 = 4;
+const NUMBER_OF_STARS: i32 = 30;
 
 struct Win32OffscreenBuffer {
     // Pixels always are 32-bits wide, Memory Order BB GG RR XX
@@ -230,7 +231,9 @@ fn draw_rectangle(
 }
 
 fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star]) {
+    // TODO(Fermin): Clear changing pixels only
     buffer.bits.fill(0);
+
     let r = rand::thread_rng().gen_range(0..255);
     let g = rand::thread_rng().gen_range(0..255);
     let b = rand::thread_rng().gen_range(0..255);
@@ -240,6 +243,8 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
 
         let speed = 7.0 * star.size as f32 * dt_for_frame;
         star.pos.y += speed;
+
+        // TODO(Fermin): Draw partial starts instead of erasing whole when bottom hits buffer limit
         if star.pos.y.round() as i32 + star.size >= buffer.height {
             star.pos.x = rand::thread_rng().gen_range(0.0..450.0);
             star.pos.y = 0.0;
@@ -313,42 +318,22 @@ fn main() -> Result<()>{
     }
 
     // --------------------------------------------------------------------
+    // NOTE(Fermin): Create collection of stars
+    // --------------------------------------------------------------------
+    let mut stars: Vec<Star> = Vec::new();
+    for _star in 0..NUMBER_OF_STARS {
+        stars.push(Star {
+            pos: V2{x: rand::thread_rng().gen_range(0.0..buffer_width as f32), y: rand::thread_rng().gen_range(0.0..buffer_height as f32)},
+            size: rand::thread_rng().gen_range(1..20),
+        })
+    }
+
+    // --------------------------------------------------------------------
     // NOTE(Fermin): Main loop
     // --------------------------------------------------------------------
     let target_seconds_per_frame: f32 = 1.0 / window.refresh_rate as f32;
     let mut last_frame_dur = target_seconds_per_frame;
-    let mut stars: [Star; 30] = [
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
-    ];
+
     while window.window_running {
         let frame_start_instant = Instant::now();
 
