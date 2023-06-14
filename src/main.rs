@@ -12,23 +12,9 @@ use windows::{
 };
 
 const WINDOW_CLASS_NAME: PCSTR = s!("win32.Window");
-const DARK_BLUE: Color   = Color { r:   3, g:  38, b:  82, a: 255, };
+const BYTES_PER_PIXEL: i32 = 4;
 
-pub struct Color {
-    r: i32,
-    g: i32,
-    b: i32,
-    a: i32
-}
-impl Color {
-    fn get_i32(&self) -> i32 {
-        // NOTE(Fermin): Pixel -> BB GG RR AA
-        let result: i32 = (self.b << 24) | (self.g << 16) | (self.r << 8) | self.a;
-        result
-    }
-}
-
-pub struct Win32OffscreenBuffer {
+struct Win32OffscreenBuffer {
     // Pixels always are 32-bits wide, Memory Order BB GG RR XX
     info: BITMAPINFO,
     pub bits: Vec<u8>,
@@ -36,13 +22,13 @@ pub struct Win32OffscreenBuffer {
     pub height: i32,
 }
 
-pub struct Window {
+struct Window {
     handle: HWND,
-    pub buffer: Win32OffscreenBuffer,
-    pub window_running: bool,
-    pub refresh_rate: i32,
+    buffer: Win32OffscreenBuffer,
+    window_running: bool,
+    refresh_rate: i32,
 }
-pub trait CheckHandle: Sized {
+trait CheckHandle: Sized {
     fn ok(self) -> Result<Self>;
 }
 impl CheckHandle for HWND {
@@ -53,6 +39,18 @@ impl CheckHandle for HWND {
             Ok(self)
         }
     }
+}
+
+struct V2 {
+    x: f32,
+    y: f32
+}
+
+struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8
 }
 
 unsafe extern "system" fn win32_main_window_callback(
@@ -93,7 +91,7 @@ unsafe extern "system" fn win32_main_window_callback(
     DefWindowProcA(window, message, wparam, lparam)
 }
 
-pub fn win32_process_pending_messages(window: &mut Window) {
+fn win32_process_pending_messages(window: &mut Window) {
     let mut message: MSG = Default::default();
     unsafe {
         while PeekMessageA(&mut message, HWND(0), 0, 0, PM_REMOVE).into() {
@@ -185,7 +183,47 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
     }
 }
 
+fn draw_rectangle(
+    pos: &V2,
+    width: i32,
+    height: i32,
+    color: &Color,
+    buffer: &mut Win32OffscreenBuffer,
+) {
+    let start_x: i32;
+    let start_y: i32;
+    
+    if pos.x + width as f32 > buffer.width as f32 {
+        start_x = buffer.width - width;
+    } else if pos.x < 0.0 {
+        start_x = 0;
+    } else {
+        start_x = pos.x.round() as i32;
+    }
+
+    if pos.y + height as f32 > buffer.height as f32 {
+        start_y = buffer.height - height;
+    } else if pos.y < 0.0 {
+        start_y = 0;
+    } else {
+        start_y = pos.y.round() as i32;
+    }
+
+    let mut row: usize = (start_x * BYTES_PER_PIXEL + start_y * buffer.width * BYTES_PER_PIXEL) as usize;
+    for _y in 0..height {
+        for x in 0..width {
+            // NOTE(Fermin): Pixel -> BB GG RR AA
+            buffer.bits[row + (x * BYTES_PER_PIXEL) as usize] = color.b;
+            buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize] = color.g;
+            buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize] = color.r;
+            buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize] = color.a;
+        }
+        row += (buffer.width * BYTES_PER_PIXEL) as usize;
+    }
+}
+
 fn update_and_render(buffer: &mut Win32OffscreenBuffer) {
+    draw_rectangle(&V2{x:200.0, y:200.0}, 15, 15, &Color{ r: 250, g: 193, b: 235, a: 255, }, buffer);
 }
 
 fn main() -> Result<()>{
@@ -194,8 +232,7 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     let buffer_width = 450;
     let buffer_height = 600;
-    let bytes_per_pixel = 4;
-    let num_of_pixels:i32 = buffer_width * buffer_height * bytes_per_pixel;
+    let num_of_pixels = buffer_width * buffer_height * BYTES_PER_PIXEL;
     let mut buffer = Win32OffscreenBuffer {
         info: Default::default(),
         bits: vec![0; num_of_pixels as usize],
