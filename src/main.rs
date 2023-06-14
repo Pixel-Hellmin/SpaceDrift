@@ -1,4 +1,5 @@
 use std::time::{Duration, Instant};
+use rand::Rng;
 use windows::{
     core::{Result, Error, PCSTR},
     s,
@@ -52,6 +53,11 @@ struct Color {
     g: u8,
     b: u8,
     a: u8
+}
+
+struct Star {
+    pos: V2,
+    size: i32,
 }
 
 unsafe extern "system" fn win32_main_window_callback(
@@ -223,8 +229,24 @@ fn draw_rectangle(
     }
 }
 
-fn update_and_render(buffer: &mut Win32OffscreenBuffer) {
-    draw_rectangle(&V2{x:200.0, y:200.0}, 15, 15, &Color{ r: 250, g: 193, b: 235, a: 255, }, buffer);
+fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star]) {
+    buffer.bits.fill(0);
+    let r = rand::thread_rng().gen_range(0..255);
+    let g = rand::thread_rng().gen_range(0..255);
+    let b = rand::thread_rng().gen_range(0..255);
+
+    for star in stars {
+        draw_rectangle(&star.pos, star.size, star.size, &Color{ r, g, b, a: 255, }, buffer);
+
+        let speed = 7.0 * star.size as f32 * dt_for_frame;
+        star.pos.y += speed;
+        if star.pos.y.round() as i32 + star.size >= buffer.height {
+            star.pos.x = rand::thread_rng().gen_range(0.0..450.0);
+            star.pos.y = 0.0;
+            star.size = rand::thread_rng().gen_range(1..20);
+        }
+    }
+
 }
 
 fn main() -> Result<()>{
@@ -294,11 +316,44 @@ fn main() -> Result<()>{
     // NOTE(Fermin): Main loop
     // --------------------------------------------------------------------
     let target_seconds_per_frame: f32 = 1.0 / window.refresh_rate as f32;
+    let mut last_frame_dur = target_seconds_per_frame;
+    let mut stars: [Star; 30] = [
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+        Star {pos: V2{x: rand::thread_rng().gen_range(0.0..450.0), y: rand::thread_rng().gen_range(0.0..600.0)}, size: rand::thread_rng().gen_range(1..20)},
+    ];
     while window.window_running {
         let frame_start_instant = Instant::now();
 
         win32_process_pending_messages(window.as_mut());
-        update_and_render(&mut window.buffer);
+        update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars);
 
         let target_ms_per_frame = (target_seconds_per_frame * 1000.0) as u128;
         let time_elapsed_since_frame_start = frame_start_instant.elapsed().as_millis();
@@ -308,7 +363,8 @@ fn main() -> Result<()>{
             .expect("Error calculating ms until next frame");
             std::thread::sleep(Duration::from_millis(ms_until_next_frame));
         }
-        //println!("{} ms/f", frame_start_instant.elapsed().as_millis());
+        last_frame_dur = frame_start_instant.elapsed().as_millis() as f32;
+        println!("{} ms/f", last_frame_dur);
     }
 
     Ok(())
