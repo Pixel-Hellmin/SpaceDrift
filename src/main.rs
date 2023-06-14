@@ -15,7 +15,7 @@ use windows::{
 
 const WINDOW_CLASS_NAME: PCSTR = s!("win32.Window");
 const BYTES_PER_PIXEL: i32 = 4;
-const NUMBER_OF_STARS: i32 = 30;
+const NUMBER_OF_STARS: i32 = 40;
 
 struct Win32OffscreenBuffer {
     // Pixels always are 32-bits wide, Memory Order BB GG RR XX
@@ -231,15 +231,12 @@ fn draw_rectangle(
 }
 
 fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star]) {
-    // TODO(Fermin): Clear changing pixels only
-    buffer.bits.fill(0);
-
     let r = rand::thread_rng().gen_range(0..255);
     let g = rand::thread_rng().gen_range(0..255);
     let b = rand::thread_rng().gen_range(0..255);
 
     for star in stars {
-        draw_rectangle(&star.pos, star.size, star.size, &Color{ r, g, b, a: 255, }, buffer);
+        draw_rectangle(&star.pos, star.size, star.size, &Color{ r: 0, g: 0, b: 0, a: 255, }, buffer);
 
         let speed = 7.0 * star.size as f32 * dt_for_frame;
         star.pos.y += speed;
@@ -250,6 +247,8 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
             star.pos.y = 0.0;
             star.size = rand::thread_rng().gen_range(1..20);
         }
+
+        draw_rectangle(&star.pos, star.size, star.size, &Color{ r, g, b, a: 255, }, buffer);
     }
 
 }
