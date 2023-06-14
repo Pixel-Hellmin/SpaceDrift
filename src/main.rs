@@ -58,7 +58,8 @@ struct Color {
 
 struct Star {
     pos: V2,
-    size: i32,
+    width: i32,
+    height: i32,
 }
 
 unsafe extern "system" fn win32_main_window_callback(
@@ -236,19 +237,24 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
     let b = rand::thread_rng().gen_range(0..255);
 
     for star in stars {
-        draw_rectangle(&star.pos, star.size, star.size, &Color{ r: 0, g: 0, b: 0, a: 255, }, buffer);
+        // NOTE(Fermin): Erase previouse frame's star
+        draw_rectangle(&star.pos, star.width, star.height, &Color{ r: 0, g: 0, b: 0, a: 255, }, buffer);
 
-        let speed = 7.0 * star.size as f32 * dt_for_frame;
+        let speed = 7.0 * star.width as f32 * dt_for_frame;
         star.pos.y += speed;
 
-        // TODO(Fermin): Draw partial starts instead of erasing whole when bottom hits buffer limit
-        if star.pos.y.round() as i32 + star.size >= buffer.height {
-            star.pos.x = rand::thread_rng().gen_range(0.0..450.0);
-            star.pos.y = 0.0;
-            star.size = rand::thread_rng().gen_range(1..20);
+        if star.pos.y.round() as i32 + star.height >= buffer.height {
+            star.height = star.height - (star.pos.y.round() as i32 + star.height - buffer.height);
         }
 
-        draw_rectangle(&star.pos, star.size, star.size, &Color{ r, g, b, a: 255, }, buffer);
+        if star.pos.y.round() as i32 >= buffer.height {
+            star.pos.x = rand::thread_rng().gen_range(0.0..buffer.width as f32);
+            star.pos.y = 0.0;
+            star.width = rand::thread_rng().gen_range(1..20);
+            star.height = star.width;
+        }
+
+        draw_rectangle(&star.pos, star.width, star.height, &Color{ r, g, b, a: 255, }, buffer);
     }
 
 }
@@ -321,9 +327,11 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     let mut stars: Vec<Star> = Vec::new();
     for _star in 0..NUMBER_OF_STARS {
+        let size = rand::thread_rng().gen_range(1..20);
         stars.push(Star {
             pos: V2{x: rand::thread_rng().gen_range(0.0..buffer_width as f32), y: rand::thread_rng().gen_range(0.0..buffer_height as f32)},
-            size: rand::thread_rng().gen_range(1..20),
+            width: size,
+            height: size,
         })
     }
 
