@@ -76,10 +76,10 @@ fn draw_rectangle(
     }
 }
 
-fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star]) {
-    let r = rand::thread_rng().gen_range(0..255);
-    let g = rand::thread_rng().gen_range(0..255);
-    let b = rand::thread_rng().gen_range(0..255);
+fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng) {
+    let r = rng.gen_range(0..255);
+    let g = rng.gen_range(0..255);
+    let b = rng.gen_range(0..255);
 
     for star in stars {
         // NOTE(Fermin): Erase previouse frame's star
@@ -93,9 +93,9 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
         }
 
         if star.pos.y.round() as i32 >= buffer.height {
-            star.pos.x = rand::thread_rng().gen_range(0.0..buffer.width as f32);
+            star.pos.x = rng.gen_range(0.0..buffer.width as f32);
             star.pos.y = 0.0;
-            star.width = rand::thread_rng().gen_range(1..20);
+            star.width = rng.gen_range(1..20);
             star.height = star.width;
         }
 
@@ -105,6 +105,8 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
 }
 
 fn main() -> Result<()>{
+    let mut rng:rand::rngs::ThreadRng = rand::thread_rng();
+
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create buffer
     // --------------------------------------------------------------------
@@ -172,9 +174,9 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     let mut stars: Vec<Star> = Vec::new();
     for _star in 0..NUMBER_OF_STARS {
-        let size = rand::thread_rng().gen_range(1..20);
+        let size = rng.gen_range(1..20);
         stars.push(Star {
-            pos: V2{x: rand::thread_rng().gen_range(0.0..buffer_width as f32), y: rand::thread_rng().gen_range(0.0..buffer_height as f32)},
+            pos: V2{x: rng.gen_range(0.0..buffer_width as f32), y: rng.gen_range(0.0..buffer_height as f32)},
             width: size,
             height: size,
         })
@@ -190,8 +192,11 @@ fn main() -> Result<()>{
         let frame_start_instant = Instant::now();
 
         win32_process_pending_messages(window.as_mut());
-        update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars);
+        update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng);
 
+        // --------------------------------------------------------------------
+        // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate
+        // --------------------------------------------------------------------
         let target_ms_per_frame = (target_seconds_per_frame * 1000.0) as u128;
         let time_elapsed_since_frame_start = frame_start_instant.elapsed().as_millis();
         if time_elapsed_since_frame_start < target_ms_per_frame {
