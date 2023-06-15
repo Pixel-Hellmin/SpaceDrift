@@ -1,6 +1,7 @@
 mod window;
 
 use crate::window::*;
+use std::fs::read;
 use std::time::{Duration, Instant};
 use rand::Rng;
 use windows::{
@@ -104,6 +105,37 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
 
 }
 
+fn render_bmp(pos: V2, bmp: &Vec<u8>, _width: i32, _height: i32, buffer: &mut Win32OffscreenBuffer) {
+
+    // NOTE(Fermin): Loading this bitmap tanks out fps
+    
+    let bmp_data_offset_index = 10;
+    let bmp_data_offset:i32 = ((bmp[bmp_data_offset_index+3] as i32) << 24) | ((bmp[bmp_data_offset_index+2] as i32) << 16) | ((bmp[bmp_data_offset_index+1] as i32) << 8) | (bmp[bmp_data_offset_index] as i32);
+
+    let bmp_width_index = 18;
+    let bmp_width:i32 = ((bmp[bmp_width_index+3] as i32) << 24) | ((bmp[bmp_width_index+2] as i32) << 16) | ((bmp[bmp_width_index+1] as i32) << 8) | (bmp[bmp_width_index] as i32);
+
+    let bmp_height_index = 22;
+    let bmp_height:i32 = ((bmp[bmp_height_index+3] as i32) << 24) | ((bmp[bmp_height_index+2] as i32) << 16) | ((bmp[bmp_height_index+1] as i32) << 8) | (bmp[bmp_height_index] as i32);
+
+    let mut row: usize = (pos.x as i32 * BYTES_PER_PIXEL + pos.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
+    for y in (0..bmp_height).rev() {
+        for x in 0..bmp_width {
+            let src_b = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL     + y * bmp_width * BYTES_PER_PIXEL) as usize];
+            let src_g = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 1 + y * bmp_width * BYTES_PER_PIXEL) as usize];
+            let src_r = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 2 + y * bmp_width * BYTES_PER_PIXEL) as usize];
+            let src_a = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 3 + y * bmp_width * BYTES_PER_PIXEL) as usize];
+
+            // NOTE(Fermin): Pixel -> BB GG RR AA
+            buffer.bits[row + (x * BYTES_PER_PIXEL    ) as usize] = src_b;
+            buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize] = src_g;
+            buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize] = src_r;
+            buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize] = src_a;
+        }
+        row += (buffer.width * BYTES_PER_PIXEL) as usize;
+    }
+}
+
 fn main() -> Result<()>{
     let mut rng:rand::rngs::ThreadRng = rand::thread_rng();
 
@@ -168,6 +200,11 @@ fn main() -> Result<()>{
         timeBeginPeriod(1);
         window.refresh_rate = GetDeviceCaps(GetDC(window_tmp), VREFRESH);
     }
+   
+    // --------------------------------------------------------------------
+    // NOTE(Fermin): Load test bitmap
+    // --------------------------------------------------------------------
+    let bmp = read("art/two_dots_astro.bmp").expect("Err: Couldnt load bitmap");
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create collection of stars
@@ -193,6 +230,7 @@ fn main() -> Result<()>{
 
         win32_process_pending_messages(window.as_mut());
         update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng);
+        render_bmp(V2{x: 10.0, y: 10.0}, &bmp, 317, 256, &mut window.buffer);
 
         // --------------------------------------------------------------------
         // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate
