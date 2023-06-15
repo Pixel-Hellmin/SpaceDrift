@@ -105,10 +105,12 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
 
 }
 
-fn render_bmp(pos: V2, bmp: &Vec<u8>, _width: i32, _height: i32, buffer: &mut Win32OffscreenBuffer) {
+fn lerp(a: f32, t: f32, b: f32) -> f32 {
+    // TODO(Fermin): Deal with multiple types
+    (1.0 - t)*a + t*b
+}
 
-    // NOTE(Fermin): Loading this bitmap tanks out fps
-    
+fn render_bmp(pos: V2, bmp: &Vec<u8>, buffer: &mut Win32OffscreenBuffer) {
     let bmp_data_offset_index = 10;
     let bmp_data_offset:i32 = ((bmp[bmp_data_offset_index+3] as i32) << 24) | ((bmp[bmp_data_offset_index+2] as i32) << 16) | ((bmp[bmp_data_offset_index+1] as i32) << 8) | (bmp[bmp_data_offset_index] as i32);
 
@@ -125,12 +127,19 @@ fn render_bmp(pos: V2, bmp: &Vec<u8>, _width: i32, _height: i32, buffer: &mut Wi
             let src_g = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 1 + y * bmp_width * BYTES_PER_PIXEL) as usize];
             let src_r = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 2 + y * bmp_width * BYTES_PER_PIXEL) as usize];
             let src_a = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 3 + y * bmp_width * BYTES_PER_PIXEL) as usize];
+            let alpha_ratio:f32 = src_a as f32 / 255.0;
 
-            // NOTE(Fermin): Pixel -> BB GG RR AA
-            buffer.bits[row + (x * BYTES_PER_PIXEL    ) as usize] = src_b;
-            buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize] = src_g;
-            buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize] = src_r;
-            buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize] = src_a;
+            let dest_b = &mut buffer.bits[row + (x * BYTES_PER_PIXEL    ) as usize];
+            *dest_b = lerp(*dest_b as f32, alpha_ratio, src_b as f32) as u8; 
+
+            let dest_g = &mut buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize];
+            *dest_g = lerp(*dest_g as f32, alpha_ratio, src_g as f32) as u8; 
+            
+            let dest_r = &mut buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize];
+            *dest_r = lerp(*dest_r as f32, alpha_ratio, src_r as f32) as u8; 
+            
+            let dest_a = &mut buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize];
+            *dest_a = src_a; 
         }
         row += (buffer.width * BYTES_PER_PIXEL) as usize;
     }
@@ -204,6 +213,7 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Load test bitmap
     // --------------------------------------------------------------------
+    // NOTE(Fermin): Loading this bitmap tanks the fps
     let bmp = read("art/two_dots_astro.bmp").expect("Err: Couldnt load bitmap");
 
     // --------------------------------------------------------------------
@@ -230,7 +240,7 @@ fn main() -> Result<()>{
 
         win32_process_pending_messages(window.as_mut());
         update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng);
-        render_bmp(V2{x: 10.0, y: 10.0}, &bmp, 317, 256, &mut window.buffer);
+        render_bmp(V2{x: 10.0, y: 10.0}, &bmp, &mut window.buffer);
 
         // --------------------------------------------------------------------
         // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate
