@@ -110,7 +110,7 @@ fn lerp(a: f32, t: f32, b: f32) -> f32 {
     (1.0 - t)*a + t*b
 }
 
-fn render_bmp(pos: V2, bmp: &Vec<u8>, buffer: &mut Win32OffscreenBuffer) {
+fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &Vec<u8>, buffer: &mut Win32OffscreenBuffer) {
     let bmp_data_offset_index = 10;
     let bmp_data_offset:i32 = ((bmp[bmp_data_offset_index+3] as i32) << 24) | ((bmp[bmp_data_offset_index+2] as i32) << 16) | ((bmp[bmp_data_offset_index+1] as i32) << 8) | (bmp[bmp_data_offset_index] as i32);
 
@@ -120,28 +120,42 @@ fn render_bmp(pos: V2, bmp: &Vec<u8>, buffer: &mut Win32OffscreenBuffer) {
     let bmp_height_index = 22;
     let bmp_height:i32 = ((bmp[bmp_height_index+3] as i32) << 24) | ((bmp[bmp_height_index+2] as i32) << 16) | ((bmp[bmp_height_index+1] as i32) << 8) | (bmp[bmp_height_index] as i32);
 
-    let mut row: usize = (pos.x as i32 * BYTES_PER_PIXEL + pos.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
-    for y in (0..bmp_height).rev() {
-        for x in 0..bmp_width {
-            let src_b = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL     + y * bmp_width * BYTES_PER_PIXEL) as usize];
-            let src_g = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 1 + y * bmp_width * BYTES_PER_PIXEL) as usize];
-            let src_r = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 2 + y * bmp_width * BYTES_PER_PIXEL) as usize];
-            let src_a = bmp[(bmp_data_offset + x * BYTES_PER_PIXEL + 3 + y * bmp_width * BYTES_PER_PIXEL) as usize];
+    let max_x = (x_axis.x - origin.x) as i32;
+    let max_y = (y_axis.y - origin.y) as i32;
+    let mut dest_row: usize = (origin.x as i32 * BYTES_PER_PIXEL + origin.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
+    for y in (0..max_y).rev() {
+        for x in 0..(max_x) {
+            let u = x as f32 / max_x as f32;
+            let v = y as f32 / max_y as f32;
+
+            assert!(u >= 0.0 && u <= 1.0);
+            assert!(v >= 0.0 && v <= 1.0);
+
+            let u_src = (u * bmp_width as f32).round() as i32;
+            let v_src = (v * bmp_height as f32).round() as i32;
+
+            let src_index = bmp_data_offset + u_src * BYTES_PER_PIXEL + v_src * bmp_width * BYTES_PER_PIXEL;
+            let src_b = bmp[(src_index) as usize];
+            let src_g = bmp[(src_index + 1) as usize];
+            let src_r = bmp[(src_index + 2) as usize];
+            let src_a = bmp[(src_index + 3) as usize];
+
             let alpha_ratio:f32 = src_a as f32 / 255.0;
 
-            let dest_b = &mut buffer.bits[row + (x * BYTES_PER_PIXEL    ) as usize];
+            let dest_index = dest_row + (x * BYTES_PER_PIXEL) as usize;
+            let dest_b = &mut buffer.bits[dest_index];
             *dest_b = lerp(*dest_b as f32, alpha_ratio, src_b as f32) as u8; 
 
-            let dest_g = &mut buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize];
+            let dest_g = &mut buffer.bits[dest_index + 1];
             *dest_g = lerp(*dest_g as f32, alpha_ratio, src_g as f32) as u8; 
             
-            let dest_r = &mut buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize];
+            let dest_r = &mut buffer.bits[dest_index + 2];
             *dest_r = lerp(*dest_r as f32, alpha_ratio, src_r as f32) as u8; 
             
-            let dest_a = &mut buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize];
+            let dest_a = &mut buffer.bits[dest_index + 3];
             *dest_a = src_a; 
         }
-        row += (buffer.width * BYTES_PER_PIXEL) as usize;
+        dest_row += (buffer.width * BYTES_PER_PIXEL) as usize;
     }
 }
 
@@ -240,7 +254,13 @@ fn main() -> Result<()>{
 
         win32_process_pending_messages(window.as_mut());
         update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng);
-        render_bmp(V2{x: 10.0, y: 10.0}, &bmp, &mut window.buffer);
+        render_bmp(
+            V2{x: 10.0, y: 10.0},
+            V2{x: 300.0, y: 10.0},
+            V2{x: 10.0, y: 500.0},
+            &bmp,
+            &mut window.buffer
+        );
 
         // --------------------------------------------------------------------
         // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate
@@ -254,7 +274,7 @@ fn main() -> Result<()>{
             std::thread::sleep(Duration::from_millis(ms_until_next_frame));
         }
         last_frame_dur = frame_start_instant.elapsed().as_millis() as f32;
-        println!("{} ms/f", last_frame_dur);
+        println!("{} fps, {} ms/f", 1.0/last_frame_dur*1000.0, last_frame_dur);
     }
 
     Ok(())
