@@ -110,35 +110,30 @@ fn lerp(a: f32, t: f32, b: f32) -> f32 {
     (1.0 - t)*a + t*b
 }
 
-fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &Vec<u8>, buffer: &mut Win32OffscreenBuffer) {
-    let bmp_data_offset_index = 10;
-    let bmp_data_offset:i32 = ((bmp[bmp_data_offset_index+3] as i32) << 24) | ((bmp[bmp_data_offset_index+2] as i32) << 16) | ((bmp[bmp_data_offset_index+1] as i32) << 8) | (bmp[bmp_data_offset_index] as i32);
-
-    let bmp_width_index = 18;
-    let bmp_width:i32 = ((bmp[bmp_width_index+3] as i32) << 24) | ((bmp[bmp_width_index+2] as i32) << 16) | ((bmp[bmp_width_index+1] as i32) << 8) | (bmp[bmp_width_index] as i32);
-
-    let bmp_height_index = 22;
-    let bmp_height:i32 = ((bmp[bmp_height_index+3] as i32) << 24) | ((bmp[bmp_height_index+2] as i32) << 16) | ((bmp[bmp_height_index+1] as i32) << 8) | (bmp[bmp_height_index] as i32);
+fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &mut Win32OffscreenBuffer) {
+    // TODO(Fermin): Try using inner products of vectors for u an v instead
 
     let max_x = (x_axis.x - origin.x) as i32;
     let max_y = (y_axis.y - origin.y) as i32;
     let mut dest_row: usize = (origin.x as i32 * BYTES_PER_PIXEL + origin.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
     for y in (0..max_y).rev() {
         for x in 0..(max_x) {
+            // TODO(Fermin): Check buffer bounds
+            // TODO(Fermin): Subpixel presision
             let u = x as f32 / max_x as f32;
             let v = y as f32 / max_y as f32;
 
             assert!(u >= 0.0 && u <= 1.0);
             assert!(v >= 0.0 && v <= 1.0);
 
-            let u_src = (u * bmp_width as f32).round() as i32;
-            let v_src = (v * bmp_height as f32).round() as i32;
+            let u_src = (u * bmp.width as f32).round() as i32;
+            let v_src = (v * bmp.height as f32).round() as i32;
 
-            let src_index = bmp_data_offset + u_src * BYTES_PER_PIXEL + v_src * bmp_width * BYTES_PER_PIXEL;
-            let src_b = bmp[(src_index) as usize];
-            let src_g = bmp[(src_index + 1) as usize];
-            let src_r = bmp[(src_index + 2) as usize];
-            let src_a = bmp[(src_index + 3) as usize];
+            let src_index = (bmp.data_offset + u_src * BYTES_PER_PIXEL + v_src * bmp.width * BYTES_PER_PIXEL) as usize;
+            let src_b = bmp.bits[src_index];
+            let src_g = bmp.bits[src_index + 1];
+            let src_r = bmp.bits[src_index + 2];
+            let src_a = bmp.bits[src_index + 3];
 
             let alpha_ratio:f32 = src_a as f32 / 255.0;
 
@@ -159,12 +154,46 @@ fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &Vec<u8>, buffer: &mut Wi
     }
 }
 
+struct LoadedBitmap {
+    bits: Vec<u8>,
+    height: i32,
+    width: i32,
+    data_offset: i32,
+}
+fn load_bitmap(file: &str) -> LoadedBitmap {
+    let bits = read(file).expect("Err: Couldnt load bitmap");
+
+    let data_offset_index = 10;
+    let data_offset:i32 = 
+        ((bits[data_offset_index+3] as i32) << 24) |
+        ((bits[data_offset_index+2] as i32) << 16) |
+        ((bits[data_offset_index+1] as i32) <<  8) |
+        (bits[data_offset_index] as i32);
+
+    let width_index = 18;
+    let width:i32 =
+        ((bits[width_index+3] as i32) << 24) |
+        ((bits[width_index+2] as i32) << 16) |
+        ((bits[width_index+1] as i32) <<  8) |
+        (bits[width_index] as i32);
+
+    let height_index = 22;
+    let height:i32 = 
+        ((bits[height_index+3] as i32) << 24) |
+        ((bits[height_index+2] as i32) << 16) |
+        ((bits[height_index+1] as i32) <<  8) |
+        (bits[height_index] as i32);
+
+    LoadedBitmap { bits, height, width, data_offset }
+}
+
 fn main() -> Result<()>{
     let mut rng:rand::rngs::ThreadRng = rand::thread_rng();
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create buffer
     // --------------------------------------------------------------------
+    // TODO(Fermin): Create InitBuffer routine in window.rs
     let buffer_width = 450;
     let buffer_height = 600;
     let num_of_pixels = buffer_width * buffer_height * BYTES_PER_PIXEL;
@@ -186,6 +215,7 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create window
     // --------------------------------------------------------------------
+    // TODO(Fermin): Create InitWindow routine in window.rs
     let instance = unsafe { GetModuleHandleA(None)? };
     let class = WNDCLASSA {
         style: CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
@@ -227,8 +257,7 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Load test bitmap
     // --------------------------------------------------------------------
-    // NOTE(Fermin): Loading this bitmap tanks the fps
-    let bmp = read("art/two_dots_astro.bmp").expect("Err: Couldnt load bitmap");
+    let bmp = load_bitmap("art/two_dots_astro.bmp");
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create collection of stars
