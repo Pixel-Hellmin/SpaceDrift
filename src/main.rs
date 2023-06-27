@@ -111,29 +111,52 @@ fn lerp(a: f32, t: f32, b: f32) -> f32 {
 }
 
 fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &mut Win32OffscreenBuffer) {
-    // TODO(Fermin): Try using inner products of vectors for u an v instead
-
     let max_x = (x_axis.x - origin.x) as i32;
     let max_y = (y_axis.y - origin.y) as i32;
     let mut dest_row: usize = (origin.x as i32 * BYTES_PER_PIXEL + origin.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
     for y in (0..max_y).rev() {
         for x in 0..(max_x) {
             // TODO(Fermin): Check buffer bounds
-            // TODO(Fermin): Subpixel presision
             let u = x as f32 / max_x as f32;
             let v = y as f32 / max_y as f32;
-
             assert!(u >= 0.0 && u <= 1.0);
             assert!(v >= 0.0 && v <= 1.0);
 
-            let u_src = (u * bmp.width as f32).round() as i32;
-            let v_src = (v * bmp.height as f32).round() as i32;
+            let texel_x = u * (bmp.width - 1) as f32;
+            let texel_y = v * (bmp.height - 1) as f32;
+            assert!(texel_x >= 0.0 && texel_x <= bmp.width as f32 - 1.0);
+            assert!(texel_y >= 0.0 && texel_y <= bmp.height as f32 - 1.0);
 
-            let src_index = (bmp.data_offset + u_src * BYTES_PER_PIXEL + v_src * bmp.width * BYTES_PER_PIXEL) as usize;
-            let src_b = bmp.bits[src_index];
-            let src_g = bmp.bits[src_index + 1];
-            let src_r = bmp.bits[src_index + 2];
-            let src_a = bmp.bits[src_index + 3];
+            let texel_dx = texel_x - texel_x.floor();
+            let texel_dy = texel_y - texel_y.floor();
+            assert!(texel_dx >= 0.0 && texel_dx <= 1.0);
+            assert!(texel_dy >= 0.0 && texel_dy <= 1.0);
+
+            // NOTE(Fermin): Sub-pixel precision
+            let texel_index = bmp.data_offset + texel_x as i32 * BYTES_PER_PIXEL + texel_y as i32 * bmp.pitch;
+            let src_index_00 = texel_index as usize;
+            let src_index_01 = (texel_index + BYTES_PER_PIXEL) as usize;
+            let src_index_10 = (texel_index + bmp.pitch) as usize;
+            let src_index_11 = (texel_index + bmp.pitch + BYTES_PER_PIXEL) as usize;
+            assert!(src_index_00 < bmp.bits.len());
+            assert!(src_index_01 < bmp.bits.len());
+            assert!(src_index_10 < bmp.bits.len());
+            assert!(src_index_11 < bmp.bits.len());
+            
+            let src_00_01_b = lerp(bmp.bits[src_index_00    ] as f32, texel_dx, bmp.bits[src_index_01    ] as f32);
+            let src_00_01_g = lerp(bmp.bits[src_index_00 + 1] as f32, texel_dx, bmp.bits[src_index_01 + 1] as f32);
+            let src_00_01_r = lerp(bmp.bits[src_index_00 + 2] as f32, texel_dx, bmp.bits[src_index_01 + 2] as f32);
+            let src_00_01_a = lerp(bmp.bits[src_index_00 + 3] as f32, texel_dx, bmp.bits[src_index_01 + 3] as f32);
+
+            let src_10_11_b = lerp(bmp.bits[src_index_10    ] as f32, texel_dx, bmp.bits[src_index_11    ] as f32);
+            let src_10_11_g = lerp(bmp.bits[src_index_10 + 1] as f32, texel_dx, bmp.bits[src_index_11 + 1] as f32);
+            let src_10_11_r = lerp(bmp.bits[src_index_10 + 2] as f32, texel_dx, bmp.bits[src_index_11 + 2] as f32);
+            let src_10_11_a = lerp(bmp.bits[src_index_10 + 3] as f32, texel_dx, bmp.bits[src_index_11 + 3] as f32);
+
+            let src_b = lerp(src_00_01_b, texel_dy, src_10_11_b);
+            let src_g = lerp(src_00_01_g, texel_dy, src_10_11_g);
+            let src_r = lerp(src_00_01_r, texel_dy, src_10_11_r);
+            let src_a = lerp(src_00_01_a, texel_dy, src_10_11_a);
 
             let alpha_ratio:f32 = src_a as f32 / 255.0;
 
@@ -148,7 +171,7 @@ fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &m
             *dest_r = lerp(*dest_r as f32, alpha_ratio, src_r as f32) as u8; 
             
             let dest_a = &mut buffer.bits[dest_index + 3];
-            *dest_a = src_a; 
+            *dest_a = src_a as u8; 
         }
         dest_row += (buffer.width * BYTES_PER_PIXEL) as usize;
     }
@@ -158,6 +181,7 @@ struct LoadedBitmap {
     bits: Vec<u8>,
     height: i32,
     width: i32,
+    pitch: i32,
     data_offset: i32,
 }
 fn load_bitmap(file: &str) -> LoadedBitmap {
@@ -184,7 +208,9 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
         ((bits[height_index+1] as i32) <<  8) |
         (bits[height_index] as i32);
 
-    LoadedBitmap { bits, height, width, data_offset }
+    let pitch = BYTES_PER_PIXEL * width;
+
+    LoadedBitmap { bits, height, width, pitch, data_offset }
 }
 
 fn main() -> Result<()>{
@@ -285,8 +311,8 @@ fn main() -> Result<()>{
         update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng);
         render_bmp(
             V2{x: 10.0, y: 10.0},
-            V2{x: 300.0, y: 10.0},
-            V2{x: 10.0, y: 500.0},
+            V2{x: 200.0, y: 10.0},
+            V2{x: 10.0, y: 420.0},
             &bmp,
             &mut window.buffer
         );
