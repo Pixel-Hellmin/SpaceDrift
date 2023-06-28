@@ -78,8 +78,8 @@ fn render_bmp(origin: &V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &
 
             let texel_x = u * (bmp.width - 1) as f32;
             let texel_y = v * (bmp.height - 1) as f32;
-            assert!(texel_x >= 0.0 && texel_x <= bmp.width as f32 - 2.0);
-            assert!(texel_y >= 0.0 && texel_y <= bmp.height as f32 - 2.0);
+            assert!(texel_x >= 0.0 && texel_x <= bmp.width as f32 - 1.0);
+            assert!(texel_y >= 0.0 && texel_y <= bmp.height as f32 - 1.0);
 
             let texel_dx = texel_x - texel_x.floor();
             let texel_dy = texel_y - texel_y.floor();
@@ -172,6 +172,7 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
         // TODO(Fermin): Currently when stars overlap, a black rectangle is show.
         // Change the order of the rendered items: First erase all bmp then
         // redraw them. Instead of erase -> redraw for each item.
+        // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
 
         // NOTE(Fermin): Erase previouse frame's star
         draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
@@ -276,7 +277,7 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Load test bitmap
     // --------------------------------------------------------------------
-    let bmp = load_bitmap("art/two_dots_astro.bmp");
+    let bmp = load_bitmap("art/star.bmp");
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create collection of stars
