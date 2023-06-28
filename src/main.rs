@@ -168,35 +168,26 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
     LoadedBitmap { bits, height, width, pitch, data_offset }
 }
 
-enum RenderType<'a> {
-    Rectangle(Color),
-    Bitmap(&'a LoadedBitmap)
-}
 struct RenderObject<'a> {
     origin: V2,
     width: i32,
     height: i32,
-    render_type: RenderType<'a>
+    bmp: &'a LoadedBitmap
 }
 
 fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng, bmp: &LoadedBitmap) {
     // NOTE(Fermin): This solves the problem with the black rectangle
-    // behind bitmaps, look for a nicer alternative!!
-    let mut erase_bmps: Vec<RenderObject> = Vec::new();
-    let mut draw_bmps: Vec<RenderObject> = Vec::new();
+    // behind bitmaps. Look for a nicer alternative?
+    let mut draw_stars: Vec<RenderObject> = Vec::new();
 
     for star in stars {
-        // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
-        erase_bmps.push(RenderObject {
-            origin: star.pos,
-            width: star.width,
-            height: star.height,
-            render_type: RenderType::Rectangle(BACKGROUND_COLOR)
-        });
+        // NOTE(Fermin): Erase previouse frame's stars
+        draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
 
         let speed = 5.0 * star.width as f32 * dt_for_frame;
         star.pos.y += speed;
 
+        // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
         if star.pos.y.round() as i32 + star.height >= buffer.height {
             star.height = star.height - (star.pos.y.round() as i32 + star.height - buffer.height);
         }
@@ -213,31 +204,23 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
             star.height = star.width;
         }
 
-        draw_bmps.push(RenderObject {
+        draw_stars.push(RenderObject {
             origin: star.pos,
             width: star.width,
             height: star.height,
-            render_type: RenderType::Bitmap(&bmp)
+            bmp: &bmp
         });
     }
 
-    for rect in erase_bmps {
-        if let RenderType::Rectangle(color) = rect.render_type {
-            draw_rectangle(&rect.origin, rect.width, rect.height, &color, buffer);
-        }
+    for star in draw_stars {
+        render_bmp(
+            &star.origin,
+            V2{x: star.origin.x + star.width as f32, y: star.origin.y},
+            V2{x: star.origin.x, y: star.origin.y + star.height as f32},
+            star.bmp,
+            buffer
+        );
     }
-    for bmp in draw_bmps {
-        if let RenderType::Bitmap(bits) = bmp.render_type {
-            render_bmp(
-                &bmp.origin,
-                V2{x: bmp.origin.x + bmp.width as f32, y: bmp.origin.y},
-                V2{x: bmp.origin.x, y: bmp.origin.y + bmp.height as f32},
-                bits,
-                buffer
-            );
-        }
-    }
-
 }
 
 fn main() -> Result<()>{
