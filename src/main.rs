@@ -20,6 +20,7 @@ const BYTES_PER_PIXEL: i32 = 4;
 const NUMBER_OF_STARS: i32 = 40;
 const BACKGROUND_COLOR: Color = Color{ r: 0, g: 0, b: 0, a: 255, };
 
+#[derive(Copy, Clone)]
 struct V2 {
     x: f32,
     y: f32
@@ -167,17 +168,33 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
     LoadedBitmap { bits, height, width, pitch, data_offset }
 }
 
+enum RenderType<'a> {
+    Rectangle(Color),
+    Bitmap(&'a LoadedBitmap)
+}
+struct RenderObject<'a> {
+    origin: V2,
+    width: i32,
+    height: i32,
+    render_type: RenderType<'a>
+}
+
 fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng, bmp: &LoadedBitmap) {
+    // NOTE(Fermin): This solves the problem with the black rectangle
+    // behind bitmaps, look for a nicer alternative!!
+    let mut erase_bmps: Vec<RenderObject> = Vec::new();
+    let mut draw_bmps: Vec<RenderObject> = Vec::new();
+
     for star in stars {
-        // TODO(Fermin): Currently when stars overlap, a black rectangle is show.
-        // Change the order of the rendered items: First erase all bmp then
-        // redraw them. Instead of erase -> redraw for each item.
         // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
+        erase_bmps.push(RenderObject {
+            origin: star.pos,
+            width: star.width,
+            height: star.height,
+            render_type: RenderType::Rectangle(BACKGROUND_COLOR)
+        });
 
-        // NOTE(Fermin): Erase previouse frame's star
-        draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
-
-        let speed = 7.0 * star.width as f32 * dt_for_frame;
+        let speed = 5.0 * star.width as f32 * dt_for_frame;
         star.pos.y += speed;
 
         if star.pos.y.round() as i32 + star.height >= buffer.height {
@@ -196,13 +213,29 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
             star.height = star.width;
         }
 
-        render_bmp(
-            &star.pos,
-            V2{x: star.pos.x + star.width as f32, y: star.pos.y},
-            V2{x: star.pos.x, y: star.pos.y + star.height as f32},
-            &bmp,
-            buffer
-        );
+        draw_bmps.push(RenderObject {
+            origin: star.pos,
+            width: star.width,
+            height: star.height,
+            render_type: RenderType::Bitmap(&bmp)
+        });
+    }
+
+    for rect in erase_bmps {
+        if let RenderType::Rectangle(color) = rect.render_type {
+            draw_rectangle(&rect.origin, rect.width, rect.height, &color, buffer);
+        }
+    }
+    for bmp in draw_bmps {
+        if let RenderType::Bitmap(bits) = bmp.render_type {
+            render_bmp(
+                &bmp.origin,
+                V2{x: bmp.origin.x + bmp.width as f32, y: bmp.origin.y},
+                V2{x: bmp.origin.x, y: bmp.origin.y + bmp.height as f32},
+                bits,
+                buffer
+            );
+        }
     }
 
 }
