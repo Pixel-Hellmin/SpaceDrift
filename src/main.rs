@@ -18,6 +18,7 @@ use windows::{
 
 const BYTES_PER_PIXEL: i32 = 4;
 const NUMBER_OF_STARS: i32 = 40;
+const BACKGROUND_COLOR: Color = Color{ r: 0, g: 0, b: 0, a: 255, };
 
 struct V2 {
     x: f32,
@@ -44,27 +45,7 @@ fn draw_rectangle(
     color: &Color,
     buffer: &mut Win32OffscreenBuffer,
 ) {
-    let start_x: i32;
-    let start_y: i32;
-    
-    // TODO(Fermin): Allow for partial stars to be drawn in the horizontal axis
-    if pos.x + width as f32 > buffer.width as f32 {
-        start_x = buffer.width - width;
-    } else if pos.x < 0.0 {
-        start_x = 0;
-    } else {
-        start_x = pos.x.round() as i32;
-    }
-
-    if pos.y + height as f32 > buffer.height as f32 {
-        start_y = buffer.height - height;
-    } else if pos.y < 0.0 {
-        start_y = 0;
-    } else {
-        start_y = pos.y.round() as i32;
-    }
-
-    let mut row: usize = (start_x * BYTES_PER_PIXEL + start_y * buffer.width * BYTES_PER_PIXEL) as usize;
+    let mut row: usize = (pos.x as i32 * BYTES_PER_PIXEL + pos.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
     for _y in 0..height {
         for x in 0..width {
             // NOTE(Fermin): Pixel -> BB GG RR AA
@@ -77,40 +58,13 @@ fn draw_rectangle(
     }
 }
 
-fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng) {
-    let r = rng.gen_range(0..255);
-    let g = rng.gen_range(0..255);
-    let b = rng.gen_range(0..255);
-
-    for star in stars {
-        // NOTE(Fermin): Erase previouse frame's star
-        draw_rectangle(&star.pos, star.width, star.height, &Color{ r: 0, g: 0, b: 0, a: 255, }, buffer);
-
-        let speed = 7.0 * star.width as f32 * dt_for_frame;
-        star.pos.y += speed;
-
-        if star.pos.y.round() as i32 + star.height >= buffer.height {
-            star.height = star.height - (star.pos.y.round() as i32 + star.height - buffer.height);
-        }
-
-        if star.pos.y.round() as i32 >= buffer.height {
-            star.pos.x = rng.gen_range(0.0..buffer.width as f32);
-            star.pos.y = 0.0;
-            star.width = rng.gen_range(1..20);
-            star.height = star.width;
-        }
-
-        draw_rectangle(&star.pos, star.width, star.height, &Color{ r, g, b, a: 255, }, buffer);
-    }
-
-}
 
 fn lerp(a: f32, t: f32, b: f32) -> f32 {
     // TODO(Fermin): Deal with multiple types
     (1.0 - t)*a + t*b
 }
 
-fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &mut Win32OffscreenBuffer) {
+fn render_bmp(origin: &V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &mut Win32OffscreenBuffer) {
     let max_x = (x_axis.x - origin.x) as i32;
     let max_y = (y_axis.y - origin.y) as i32;
     let mut dest_row: usize = (origin.x as i32 * BYTES_PER_PIXEL + origin.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
@@ -124,8 +78,8 @@ fn render_bmp(origin: V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &m
 
             let texel_x = u * (bmp.width - 1) as f32;
             let texel_y = v * (bmp.height - 1) as f32;
-            assert!(texel_x >= 0.0 && texel_x <= bmp.width as f32 - 1.0);
-            assert!(texel_y >= 0.0 && texel_y <= bmp.height as f32 - 1.0);
+            assert!(texel_x >= 0.0 && texel_x <= bmp.width as f32 - 2.0);
+            assert!(texel_y >= 0.0 && texel_y <= bmp.height as f32 - 2.0);
 
             let texel_dx = texel_x - texel_x.floor();
             let texel_dy = texel_y - texel_y.floor();
@@ -213,6 +167,45 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
     LoadedBitmap { bits, height, width, pitch, data_offset }
 }
 
+fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng, bmp: &LoadedBitmap) {
+    for star in stars {
+        // TODO(Fermin): Currently when stars overlap, a black rectangle is show.
+        // Change the order of the rendered items: First erase all bmp then
+        // redraw them. Instead of erase -> redraw for each item.
+
+        // NOTE(Fermin): Erase previouse frame's star
+        draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
+
+        let speed = 7.0 * star.width as f32 * dt_for_frame;
+        star.pos.y += speed;
+
+        if star.pos.y.round() as i32 + star.height >= buffer.height {
+            star.height = star.height - (star.pos.y.round() as i32 + star.height - buffer.height);
+        }
+
+        if star.pos.y.round() as i32 >= buffer.height {
+            star.pos.x = rng.gen_range(0.0..buffer.width as f32);
+            star.pos.y = 0.0;
+            star.width = rng.gen_range(1..20);
+            star.height = star.width;
+        }
+
+        if star.pos.x.round() as i32 + star.width >= buffer.width {
+            star.width = star.pos.x.round() as i32 + star.width - buffer.width;
+            star.height = star.width;
+        }
+
+        render_bmp(
+            &star.pos,
+            V2{x: star.pos.x + star.width as f32, y: star.pos.y},
+            V2{x: star.pos.x, y: star.pos.y + star.height as f32},
+            &bmp,
+            buffer
+        );
+    }
+
+}
+
 fn main() -> Result<()>{
     let mut rng:rand::rngs::ThreadRng = rand::thread_rng();
 
@@ -225,7 +218,7 @@ fn main() -> Result<()>{
     let num_of_pixels = buffer_width * buffer_height * BYTES_PER_PIXEL;
     let mut buffer = Win32OffscreenBuffer {
         info: Default::default(),
-        bits: vec![0; num_of_pixels as usize],
+        bits: vec![0; num_of_pixels as usize], //NOTE(Fermin): Fill bg with dif color?
         width: buffer_width,
         height: buffer_height,
     };
@@ -292,7 +285,7 @@ fn main() -> Result<()>{
     for _star in 0..NUMBER_OF_STARS {
         let size = rng.gen_range(1..20);
         stars.push(Star {
-            pos: V2{x: rng.gen_range(0.0..buffer_width as f32), y: rng.gen_range(0.0..buffer_height as f32)},
+            pos: V2{x: rng.gen_range(0.0..(buffer_width - size) as f32), y: rng.gen_range(0.0..(buffer_height - size) as f32)},
             width: size,
             height: size,
         })
@@ -308,14 +301,7 @@ fn main() -> Result<()>{
         let frame_start_instant = Instant::now();
 
         win32_process_pending_messages(window.as_mut());
-        update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng);
-        render_bmp(
-            V2{x: 10.0, y: 10.0},
-            V2{x: 200.0, y: 10.0},
-            V2{x: 10.0, y: 420.0},
-            &bmp,
-            &mut window.buffer
-        );
+        update_and_render(&mut window.buffer, last_frame_dur / 1000.0, &mut stars, &mut rng, &bmp);
 
         // --------------------------------------------------------------------
         // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate
