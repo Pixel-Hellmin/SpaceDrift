@@ -36,7 +36,8 @@ struct Color {
 struct Star {
     pos: V2,
     width: i32,
-    height: i32,
+    max_height: i32,
+    current_height: i32,
 }
 
 fn draw_rectangle(
@@ -180,34 +181,45 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
     // behind bitmaps. Look for a nicer alternative?
     let mut draw_stars: Vec<RenderObject> = Vec::new();
 
+    // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
     for star in stars {
         // NOTE(Fermin): Erase previouse frame's stars
-        draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
+        draw_rectangle(&star.pos, star.width, star.current_height, &BACKGROUND_COLOR, buffer);
 
         let speed = 5.0 * star.width as f32 * dt_for_frame;
-        star.pos.y += speed;
+        if star.pos.y == 0.0 && star.current_height < star.max_height {
+            // NOTE(Fermin): This growth rate doesn't match the speed..
+            // consider using floats for height and widths
+            star.current_height += speed.ceil() as i32;
+            if star.current_height > star.max_height {
+                star.current_height = star.max_height;
+            }
+        } else {
+            star.pos.y += speed;
+        }
 
-        // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
-        if star.pos.y.round() as i32 + star.height >= buffer.height {
-            star.height = star.height - (star.pos.y.round() as i32 + star.height - buffer.height);
+        if star.pos.y.round() as i32 + star.current_height >= buffer.height {
+            star.current_height = star.current_height - (star.pos.y.round() as i32 + star.current_height - buffer.height);
+        }
+
+        if star.pos.x.round() as i32 + star.width >= buffer.width {
+            star.width = star.pos.x.round() as i32 + star.width - buffer.width;
+            star.current_height = star.width;
+            star.max_height = star.width;
         }
 
         if star.pos.y.round() as i32 >= buffer.height {
             star.pos.x = rng.gen_range(0.0..buffer.width as f32);
             star.pos.y = 0.0;
             star.width = rng.gen_range(1..20);
-            star.height = star.width;
-        }
-
-        if star.pos.x.round() as i32 + star.width >= buffer.width {
-            star.width = star.pos.x.round() as i32 + star.width - buffer.width;
-            star.height = star.width;
+            star.current_height = 0;
+            star.max_height = star.width;
         }
 
         draw_stars.push(RenderObject {
             origin: star.pos,
             width: star.width,
-            height: star.height,
+            height: star.current_height,
             bmp: &bmp
         });
     }
@@ -224,8 +236,6 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
 }
 
 fn main() -> Result<()>{
-    let mut rng:rand::rngs::ThreadRng = rand::thread_rng();
-
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create buffer
     // --------------------------------------------------------------------
@@ -298,13 +308,16 @@ fn main() -> Result<()>{
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create collection of stars
     // --------------------------------------------------------------------
+    let mut rng:rand::rngs::ThreadRng = rand::thread_rng();
+
     let mut stars: Vec<Star> = Vec::new();
     for _star in 0..NUMBER_OF_STARS {
         let size = rng.gen_range(1..20);
         stars.push(Star {
             pos: V2{x: rng.gen_range(0.0..(buffer_width - size) as f32), y: rng.gen_range(0.0..(buffer_height - size) as f32)},
             width: size,
-            height: size,
+            max_height: size,
+            current_height: size,
         })
     }
 
