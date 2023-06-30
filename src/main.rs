@@ -25,6 +25,26 @@ struct V2 {
     x: f32,
     y: f32
 }
+impl std::ops::Add<V2> for V2 {
+    type Output = V2;
+
+    fn add(self, a: V2) -> V2 {
+        V2 {
+            x: self.x + a.x,
+            y: self.y + a.y,
+        }
+    }
+}
+impl std::ops::Sub<V2> for V2 {
+    type Output = V2;
+
+    fn sub(self, a: V2) -> V2 {
+        V2 {
+            x: self.x - a.x,
+            y: self.y - a.y,
+        }
+    }
+}
 
 struct Color {
     r: u8,
@@ -36,8 +56,7 @@ struct Color {
 struct Star {
     pos: V2,
     width: i32,
-    max_height: i32,
-    current_height: i32,
+    height: i32,
 }
 
 fn draw_rectangle(
@@ -48,15 +67,23 @@ fn draw_rectangle(
     buffer: &mut Win32OffscreenBuffer,
 ) {
     let mut row: usize = (pos.x as i32 * BYTES_PER_PIXEL + pos.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
-    for _y in 0..height {
-        for x in 0..width {
-            // NOTE(Fermin): Pixel -> BB GG RR AA
-            buffer.bits[row + (x * BYTES_PER_PIXEL) as usize] = color.b;
-            buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize] = color.g;
-            buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize] = color.r;
-            buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize] = color.a;
+    for y in 0..=height {
+        let mut drawn = false;
+        for x in 0..=width {
+            let abs_x = x + pos.x as i32;
+            let abs_y = y + pos.y as i32;
+            if abs_y >= 0 && abs_y < buffer.height && abs_x >= 0 && abs_x < buffer.width {
+                // NOTE(Fermin): Pixel -> BB GG RR AA
+                buffer.bits[row + (x * BYTES_PER_PIXEL) as usize] = color.b;
+                buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize] = color.g;
+                buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize] = color.r;
+                buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize] = color.a;
+                drawn = true;
+            }
         }
-        row += (buffer.width * BYTES_PER_PIXEL) as usize;
+        if drawn {
+            row += (buffer.width * BYTES_PER_PIXEL) as usize;
+        }
     }
 }
 
@@ -67,69 +94,92 @@ fn lerp(a: f32, t: f32, b: f32) -> f32 {
 }
 
 fn render_bmp(origin: &V2, x_axis: V2, y_axis: V2, bmp: &LoadedBitmap, buffer: &mut Win32OffscreenBuffer) {
-    let max_x = (x_axis.x - origin.x) as i32;
-    let max_y = (y_axis.y - origin.y) as i32;
-    let mut dest_row: usize = (origin.x as i32 * BYTES_PER_PIXEL + origin.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
-    for y in (0..max_y).rev() {
-        for x in 0..(max_x) {
-            // TODO(Fermin): Check buffer bounds
-            let u = x as f32 / max_x as f32;
-            let v = y as f32 / max_y as f32;
-            assert!(u >= 0.0 && u <= 1.0);
-            assert!(v >= 0.0 && v <= 1.0);
 
-            let texel_x = u * (bmp.width - 1) as f32;
-            let texel_y = v * (bmp.height - 1) as f32;
-            assert!(texel_x >= 0.0 && texel_x <= bmp.width as f32 - 1.0);
-            assert!(texel_y >= 0.0 && texel_y <= bmp.height as f32 - 1.0);
+    let max_width = buffer.width - 1;
+    let max_height = buffer.height - 1;
+    let mut x_min = max_width;
+    let mut x_max = 0;
+    let mut y_min = max_height;
+    let mut y_max = 0;
 
-            let texel_dx = texel_x - texel_x.floor();
-            let texel_dy = texel_y - texel_y.floor();
-            assert!(texel_dx >= 0.0 && texel_dx <= 1.0);
-            assert!(texel_dy >= 0.0 && texel_dy <= 1.0);
+    let bmp_corners = [
+        *origin,
+        x_axis,
+        x_axis + y_axis - *origin,
+        y_axis
+    ];
+    for corner in bmp_corners {
+        let floor_x = corner.x.floor() as i32;
+        let ceil_x = corner.x.ceil() as i32;
+        let floor_y = corner.y.floor() as i32;
+        let ceil_y = corner.y.ceil() as i32;
 
-            // NOTE(Fermin): Sub-pixel precision
-            let texel_index = bmp.data_offset + texel_x as i32 * BYTES_PER_PIXEL + texel_y as i32 * bmp.pitch;
-            let src_index_00 = texel_index as usize;
-            let src_index_01 = (texel_index + BYTES_PER_PIXEL) as usize;
-            let src_index_10 = (texel_index + bmp.pitch) as usize;
-            let src_index_11 = (texel_index + bmp.pitch + BYTES_PER_PIXEL) as usize;
-            assert!(src_index_00 < bmp.bits.len());
-            assert!(src_index_01 < bmp.bits.len());
-            assert!(src_index_10 < bmp.bits.len());
-            assert!(src_index_11 < bmp.bits.len());
-            
-            let src_00_01_b = lerp(bmp.bits[src_index_00    ] as f32, texel_dx, bmp.bits[src_index_01    ] as f32);
-            let src_00_01_g = lerp(bmp.bits[src_index_00 + 1] as f32, texel_dx, bmp.bits[src_index_01 + 1] as f32);
-            let src_00_01_r = lerp(bmp.bits[src_index_00 + 2] as f32, texel_dx, bmp.bits[src_index_01 + 2] as f32);
-            let src_00_01_a = lerp(bmp.bits[src_index_00 + 3] as f32, texel_dx, bmp.bits[src_index_01 + 3] as f32);
+        if x_min > floor_x { x_min = floor_x; }
+        if x_max < ceil_x { x_max = ceil_x; }
+        if y_min > floor_y { y_min = floor_y; }
+        if y_max < ceil_y { y_max = ceil_y; }
+    }
 
-            let src_10_11_b = lerp(bmp.bits[src_index_10    ] as f32, texel_dx, bmp.bits[src_index_11    ] as f32);
-            let src_10_11_g = lerp(bmp.bits[src_index_10 + 1] as f32, texel_dx, bmp.bits[src_index_11 + 1] as f32);
-            let src_10_11_r = lerp(bmp.bits[src_index_10 + 2] as f32, texel_dx, bmp.bits[src_index_11 + 2] as f32);
-            let src_10_11_a = lerp(bmp.bits[src_index_10 + 3] as f32, texel_dx, bmp.bits[src_index_11 + 3] as f32);
+    let mut dest_row: usize = (x_min as i32 * BYTES_PER_PIXEL + y_min as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
+    for y in y_min..=y_max {
+        let mut dest_index = dest_row;
+        let mut drawn = false;
+        for x in x_min..=x_max {
+            if y >= 0 && y < max_height && x >= 0 && x < max_width {
+                let u = (x_max - x) as f32 / (x_max - x_min) as f32;
+                let v = (y_max - y) as f32 / (y_max - y_min) as f32;
+                assert!(u >= 0.0 && u <= 1.0);
+                assert!(v >= 0.0 && v <= 1.0);
 
-            let src_b = lerp(src_00_01_b, texel_dy, src_10_11_b);
-            let src_g = lerp(src_00_01_g, texel_dy, src_10_11_g);
-            let src_r = lerp(src_00_01_r, texel_dy, src_10_11_r);
-            let src_a = lerp(src_00_01_a, texel_dy, src_10_11_a);
+                let texel_x = u * (bmp.width - 2) as f32;
+                let texel_y = v * (bmp.height - 2) as f32;
 
-            let alpha_ratio:f32 = src_a as f32 / 255.0;
+                let texel_dx = texel_x - texel_x.floor();
+                let texel_dy = texel_y - texel_y.floor();
 
-            let dest_index = dest_row + (x * BYTES_PER_PIXEL) as usize;
-            let dest_b = &mut buffer.bits[dest_index];
-            *dest_b = lerp(*dest_b as f32, alpha_ratio, src_b as f32) as u8; 
+                // NOTE(Fermin): Sub-pixel precision
+                let texel_index = bmp.data_offset + texel_x as i32 * BYTES_PER_PIXEL + texel_y as i32 * bmp.pitch;
+                let src_index_00 = texel_index as usize;
+                let src_index_01 = (texel_index + BYTES_PER_PIXEL) as usize;
+                let src_index_10 = (texel_index + bmp.pitch) as usize;
+                let src_index_11 = (texel_index + bmp.pitch + BYTES_PER_PIXEL) as usize;
+                
+                let src_00_01_b = lerp(bmp.bits[src_index_00    ] as f32, texel_dx, bmp.bits[src_index_01    ] as f32);
+                let src_00_01_g = lerp(bmp.bits[src_index_00 + 1] as f32, texel_dx, bmp.bits[src_index_01 + 1] as f32);
+                let src_00_01_r = lerp(bmp.bits[src_index_00 + 2] as f32, texel_dx, bmp.bits[src_index_01 + 2] as f32);
+                let src_00_01_a = lerp(bmp.bits[src_index_00 + 3] as f32, texel_dx, bmp.bits[src_index_01 + 3] as f32);
 
-            let dest_g = &mut buffer.bits[dest_index + 1];
-            *dest_g = lerp(*dest_g as f32, alpha_ratio, src_g as f32) as u8; 
-            
-            let dest_r = &mut buffer.bits[dest_index + 2];
-            *dest_r = lerp(*dest_r as f32, alpha_ratio, src_r as f32) as u8; 
-            
-            let dest_a = &mut buffer.bits[dest_index + 3];
-            *dest_a = src_a as u8; 
+                let src_10_11_b = lerp(bmp.bits[src_index_10    ] as f32, texel_dx, bmp.bits[src_index_11    ] as f32);
+                let src_10_11_g = lerp(bmp.bits[src_index_10 + 1] as f32, texel_dx, bmp.bits[src_index_11 + 1] as f32);
+                let src_10_11_r = lerp(bmp.bits[src_index_10 + 2] as f32, texel_dx, bmp.bits[src_index_11 + 2] as f32);
+                let src_10_11_a = lerp(bmp.bits[src_index_10 + 3] as f32, texel_dx, bmp.bits[src_index_11 + 3] as f32);
+
+                let src_b = lerp(src_00_01_b, texel_dy, src_10_11_b);
+                let src_g = lerp(src_00_01_g, texel_dy, src_10_11_g);
+                let src_r = lerp(src_00_01_r, texel_dy, src_10_11_r);
+                let src_a = lerp(src_00_01_a, texel_dy, src_10_11_a);
+
+                let alpha_ratio:f32 = src_a as f32 / 255.0;
+
+                let dest_b = &mut buffer.bits[dest_index];
+                *dest_b = lerp(*dest_b as f32, alpha_ratio, src_b as f32) as u8; 
+
+                let dest_g = &mut buffer.bits[dest_index + 1];
+                *dest_g = lerp(*dest_g as f32, alpha_ratio, src_g as f32) as u8; 
+                
+                let dest_r = &mut buffer.bits[dest_index + 2];
+                *dest_r = lerp(*dest_r as f32, alpha_ratio, src_r as f32) as u8; 
+                
+                let dest_a = &mut buffer.bits[dest_index + 3];
+                *dest_a = src_a as u8; 
+
+                dest_index += BYTES_PER_PIXEL as usize;
+                drawn = true;
+            }
         }
-        dest_row += (buffer.width * BYTES_PER_PIXEL) as usize;
+        if drawn {
+            dest_row += (buffer.width * BYTES_PER_PIXEL) as usize;
+        }
     }
 }
 
@@ -169,67 +219,31 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
     LoadedBitmap { bits, height, width, pitch, data_offset }
 }
 
-struct RenderObject<'a> {
-    origin: V2,
-    width: i32,
-    height: i32,
-    bmp: &'a LoadedBitmap
-}
-
 fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng, bmp: &LoadedBitmap) {
-    // NOTE(Fermin): This solves the problem with the black rectangle
-    // behind bitmaps. Look for a nicer alternative?
-    let mut draw_stars: Vec<RenderObject> = Vec::new();
-
-    // TODO(Fermin): When bitmap is out of bounds, cut it, dont scale it.
-    for star in stars {
+    // TODO(Fermin): Formalize bound check between draw rectangle and render bmp
+    for star in &mut *stars {
         // NOTE(Fermin): Erase previouse frame's stars
-        draw_rectangle(&star.pos, star.width, star.current_height, &BACKGROUND_COLOR, buffer);
+        draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
 
         let speed = 5.0 * star.width as f32 * dt_for_frame;
-        if star.pos.y == 0.0 && star.current_height < star.max_height {
-            // NOTE(Fermin): This growth rate doesn't match the speed..
-            // consider using floats for height and widths
-            star.current_height += speed.ceil() as i32;
-            if star.current_height > star.max_height {
-                star.current_height = star.max_height;
-            }
-        } else {
-            star.pos.y += speed;
-        }
-
-        if star.pos.y.round() as i32 + star.current_height >= buffer.height {
-            star.current_height = star.current_height - (star.pos.y.round() as i32 + star.current_height - buffer.height);
-        }
-
-        if star.pos.x.round() as i32 + star.width >= buffer.width {
-            star.width = star.pos.x.round() as i32 + star.width - buffer.width;
-            star.current_height = star.width;
-            star.max_height = star.width;
-        }
+        star.pos.y += speed;
 
         if star.pos.y.round() as i32 >= buffer.height {
             star.pos.x = rng.gen_range(0.0..buffer.width as f32);
             star.pos.y = 0.0;
             star.width = rng.gen_range(1..20);
-            star.current_height = 0;
-            star.max_height = star.width;
+            star.height = star.width;
         }
-
-        draw_stars.push(RenderObject {
-            origin: star.pos,
-            width: star.width,
-            height: star.current_height,
-            bmp: &bmp
-        });
     }
 
-    for star in draw_stars {
+    // NOTE(Fermin): We erase in the first loop and draw in this one to avoid
+    // erasing stars that overlap
+    for star in stars {
         render_bmp(
-            &star.origin,
-            V2{x: star.origin.x + star.width as f32, y: star.origin.y},
-            V2{x: star.origin.x, y: star.origin.y + star.height as f32},
-            star.bmp,
+            &star.pos,
+            V2{x: star.pos.x + star.width as f32, y: star.pos.y},
+            V2{x: star.pos.x, y: star.pos.y + star.height as f32},
+            bmp,
             buffer
         );
     }
@@ -316,8 +330,7 @@ fn main() -> Result<()>{
         stars.push(Star {
             pos: V2{x: rng.gen_range(0.0..(buffer_width - size) as f32), y: rng.gen_range(0.0..(buffer_height - size) as f32)},
             width: size,
-            max_height: size,
-            current_height: size,
+            height: size,
         })
     }
 
