@@ -1,12 +1,12 @@
 use windows::{
-    core::{Result, Error, PCSTR},
+    core::{Error, Result, PCSTR},
     s,
     Win32::{
+        Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
         Graphics::Gdi::*,
-        UI::WindowsAndMessaging::*,
         UI::Input::KeyboardAndMouse::VK_F4,
-        Foundation::{RECT, HWND, LPARAM, LRESULT, WPARAM},
-    }
+        UI::WindowsAndMessaging::*,
+    },
 };
 
 pub const WINDOW_CLASS_NAME: PCSTR = s!("win32.Window");
@@ -17,6 +17,7 @@ pub struct Win32OffscreenBuffer {
     pub bits: Vec<u8>,
     pub width: i32,
     pub height: i32,
+    pub pitch: i32,
 }
 
 pub struct Window {
@@ -82,8 +83,8 @@ pub fn win32_process_pending_messages(window: &mut Window) {
         while PeekMessageA(&mut message, HWND(0), 0, 0, PM_REMOVE).into() {
             match message.message {
                 WM_SYSKEYDOWN | WM_SYSKEYUP | WM_KEYDOWN | WM_KEYUP => {
-                    let v_k_code: char = char::from_u32(message.wParam.0 as u32)
-                        .expect("Failed to parse VKCode");
+                    let v_k_code: char =
+                        char::from_u32(message.wParam.0 as u32).expect("Failed to parse VKCode");
 
                     let was_down = message.lParam.0 & (1 << 30) != 0;
                     let is_down = (message.lParam.0 & (1 << 31)) == 0;
@@ -117,22 +118,8 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
         let window_height = client_rect.bottom - client_rect.top;
         let padding = 10;
 
-        PatBlt(
-            device_context,
-            0,
-            0,
-            window_width,
-            padding,
-            WHITENESS,
-        );
-        PatBlt(
-            device_context,
-            0,
-            0,
-            padding,
-            window_height,
-            WHITENESS,
-        );
+        PatBlt(device_context, 0, 0, window_width, padding, WHITENESS);
+        PatBlt(device_context, 0, 0, padding, window_height, WHITENESS);
         PatBlt(
             device_context,
             padding + window.buffer.width,
