@@ -19,6 +19,7 @@ use windows::{
 const BYTES_PER_PIXEL: i32 = 4;
 const NUMBER_OF_STARS: i32 = 40;
 const BACKGROUND_COLOR: Color = Color{ r: 0, g: 0, b: 0, a: 255, };
+const STAR_RADIUS: i32 = 18;
 
 #[derive(Copy, Clone)]
 struct V2 {
@@ -45,6 +46,9 @@ impl std::ops::Sub<V2> for V2 {
         }
     }
 }
+fn v2_length(a: V2) -> f32 {
+    (a.x * a.x + a.y * a.y).sqrt()
+}
 
 struct Color {
     r: u8,
@@ -54,9 +58,8 @@ struct Color {
 }
 
 struct Star {
-    pos: V2,
-    width: i32,
-    height: i32,
+    origin: V2,
+    radius: i32,
 }
 
 fn draw_rectangle(
@@ -66,18 +69,21 @@ fn draw_rectangle(
     color: &Color,
     buffer: &mut Win32OffscreenBuffer,
 ) {
-    let mut row: usize = (pos.x as i32 * BYTES_PER_PIXEL + pos.y as i32 * buffer.width * BYTES_PER_PIXEL) as usize;
-    for y in 0..=height {
+    let row_x_index = pos.x.clamp(0.0, buffer.width as f32 - 1.0) as i32;
+    let row_y_index = pos.y.clamp(0.0, buffer.height as f32 - 1.0) as i32;
+    let mut row: usize = (row_x_index * BYTES_PER_PIXEL + row_y_index * buffer.width * BYTES_PER_PIXEL) as usize;
+    for y in 0..height {
         let mut drawn = false;
-        for x in 0..=width {
-            let abs_x = x + pos.x as i32;
-            let abs_y = y + pos.y as i32;
-            if abs_y >= 0 && abs_y < buffer.height && abs_x >= 0 && abs_x < buffer.width {
+        for x in 0..width {
+            let pixel_x = x + pos.x as i32;
+            let pixel_y = y + pos.y as i32;
+            if pixel_y >= 0 && pixel_y < buffer.height && pixel_x >= 0 && pixel_x < buffer.width {
                 // NOTE(Fermin): Pixel -> BB GG RR AA
-                buffer.bits[row + (x * BYTES_PER_PIXEL) as usize] = color.b;
-                buffer.bits[row + (x * BYTES_PER_PIXEL + 1) as usize] = color.g;
-                buffer.bits[row + (x * BYTES_PER_PIXEL + 2) as usize] = color.r;
-                buffer.bits[row + (x * BYTES_PER_PIXEL + 3) as usize] = color.a;
+                let dest_index = row + (x * BYTES_PER_PIXEL) as usize;
+                buffer.bits[dest_index] = color.b;
+                buffer.bits[dest_index + 1] = color.g;
+                buffer.bits[dest_index + 2] = color.r;
+                buffer.bits[dest_index + 3] = color.a;
                 drawn = true;
             }
         }
@@ -219,26 +225,66 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
     LoadedBitmap { bits, height, width, pitch, data_offset }
 }
 
+fn draw_star(star: &Star, buffer: &mut Win32OffscreenBuffer) {
+    let top_left = star.origin - V2 {x: star.radius as f32, y: star.radius as f32};
+    let row_x_index = top_left.x.clamp(0.0, buffer.width as f32 - 1.0) as i32;
+    let row_y_index = top_left.y.clamp(0.0, buffer.height as f32 - 1.0) as i32;
+    let mut row:usize = (row_x_index * BYTES_PER_PIXEL + row_y_index * buffer.width * BYTES_PER_PIXEL) as usize;
+    for y in 0..star.radius * 2 {
+        let mut drawn = false;
+        for x in 0..star.radius * 2 {
+            let pixel_x = top_left.x as i32 + x;
+            let pixel_y = top_left.y as i32 + y;
+            if pixel_y >= 0 && pixel_y < buffer.height && pixel_x >= 0 && pixel_x < buffer.width {
+                let dest_index:usize = row + (x * BYTES_PER_PIXEL) as usize;
+
+                // NOTE(Fermin): We need to clamp because we are iterating on a square,
+                // so some pixels(corners) will be further away than radius of the star
+                let dist_from_origin = (1.0 - v2_length(V2{x: pixel_x as f32, y: pixel_y as f32} - star.origin) / star.radius as f32)
+                    .clamp(0.0, 1.0);
+
+                // TODO(Fermin): Define star color
+                let src_b = (206.0 * dist_from_origin).round();
+                let src_g = (113.0 * dist_from_origin).round();
+                let src_r = (255.0 * dist_from_origin).round();
+                buffer.bits[dest_index    ] = lerp(buffer.bits[dest_index    ] as f32, dist_from_origin, src_b) as u8;
+                buffer.bits[dest_index + 1] = lerp(buffer.bits[dest_index + 1] as f32, dist_from_origin, src_g) as u8;
+                buffer.bits[dest_index + 2] = lerp(buffer.bits[dest_index + 2] as f32, dist_from_origin, src_r) as u8;
+                buffer.bits[dest_index + 3] = 255;
+                drawn = true;
+            }
+        }
+        if drawn {
+            row += (buffer.width * BYTES_PER_PIXEL) as usize;
+        }
+    }
+}
+
 fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars: &mut [Star], rng: &mut rand::rngs::ThreadRng, bmp: &LoadedBitmap) {
     // TODO(Fermin): Formalize bound check between draw rectangle and render bmp
     for star in &mut *stars {
-        // NOTE(Fermin): Erase previouse frame's stars
-        draw_rectangle(&star.pos, star.width, star.height, &BACKGROUND_COLOR, buffer);
+        // NOTE(Fermin): Erase previouse frame's star
+        draw_rectangle(
+            &(star.origin - V2{x: star.radius as f32, y: star.radius as f32}),
+            star.radius * 2,
+            star.radius * 2,
+            &BACKGROUND_COLOR, buffer
+        );
 
-        let speed = 5.0 * star.width as f32 * dt_for_frame;
-        star.pos.y += speed;
+        let speed = 3.0 * star.radius as f32 * dt_for_frame;
+        star.origin.y += speed;
 
-        if star.pos.y.round() as i32 >= buffer.height {
-            star.pos.x = rng.gen_range(0.0..buffer.width as f32);
-            star.pos.y = 0.0;
-            star.width = rng.gen_range(1..20);
-            star.height = star.width;
+        if star.origin.y.round() as i32 >= buffer.height {
+            star.origin.x = rng.gen_range(0.0..buffer.width as f32);
+            star.radius = rng.gen_range(1..STAR_RADIUS);
+            star.origin.y = -star.radius as f32;
         }
     }
 
     // NOTE(Fermin): We erase in the first loop and draw in this one to avoid
     // erasing stars that overlap
     for star in stars {
+        /*
         render_bmp(
             &star.pos,
             V2{x: star.pos.x + star.width as f32, y: star.pos.y},
@@ -246,6 +292,8 @@ fn update_and_render(buffer: &mut Win32OffscreenBuffer, dt_for_frame: f32, stars
             bmp,
             buffer
         );
+        */
+        draw_star(&star, buffer);
     }
 }
 
@@ -326,11 +374,10 @@ fn main() -> Result<()>{
 
     let mut stars: Vec<Star> = Vec::new();
     for _star in 0..NUMBER_OF_STARS {
-        let size = rng.gen_range(1..20);
+        let size = rng.gen_range(1..STAR_RADIUS);
         stars.push(Star {
-            pos: V2{x: rng.gen_range(0.0..(buffer_width - size) as f32), y: rng.gen_range(0.0..(buffer_height - size) as f32)},
-            width: size,
-            height: size,
+            origin: V2{x: rng.gen_range(0.0..(buffer_width - size) as f32), y: rng.gen_range(0.0..(buffer_height - size) as f32)},
+            radius: size,
         })
     }
 
