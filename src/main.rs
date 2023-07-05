@@ -24,7 +24,7 @@ const BACKGROUND_COLOR: Color = Color {
     b: 0,
     a: 255,
 };
-const STAR_RADIUS: i32 = 18;
+const STAR_RADIUS: i32 = 12;
 
 #[derive(Copy, Clone)]
 struct V2 {
@@ -291,28 +291,26 @@ fn draw_star(star: &Star, buffer: &mut Win32OffscreenBuffer) {
             if pixel_y >= 0 && pixel_y < buffer.height && pixel_x >= 0 && pixel_x < buffer.width {
                 let dest_index: usize = row + (x * BYTES_PER_PIXEL) as usize;
 
+                let pixel_radius = v2_length( V2 { x: pixel_x as f32, y: pixel_y as f32, } - star.origin,);
                 // NOTE(Fermin): We need to clamp because we are iterating on a square,
                 // so some pixels(corners) will be further away than radius of the star
-                let dist_from_origin = (1.0
-                    - v2_length(
-                        V2 {
-                            x: pixel_x as f32,
-                            y: pixel_y as f32,
-                        } - star.origin,
-                    ) / star.radius as f32)
-                    .clamp(0.0, 1.0);
+                // resulting in a negative opacity
+                let pixel_opacity = (1.0 - (pixel_radius / star.radius as f32)).clamp(0.0, 1.0);
 
                 // TODO(Fermin): Define star color
-                let src_b = (206.0 * dist_from_origin).round();
-                let src_g = (113.0 * dist_from_origin).round();
-                let src_r = (255.0 * dist_from_origin).round();
+                let src_b = 206.0;
+                let src_g = 113.0;
+                let src_r = 255.0;
+                let src_a = (255.0 * pixel_opacity).round();
+                let color_t = src_a / 255.0;
+
                 buffer.bits[dest_index] =
-                    lerp(buffer.bits[dest_index] as f32, dist_from_origin, src_b) as u8;
+                    lerp(buffer.bits[dest_index] as f32, color_t, src_b) as u8;
                 buffer.bits[dest_index + 1] =
-                    lerp(buffer.bits[dest_index + 1] as f32, dist_from_origin, src_g) as u8;
+                    lerp(buffer.bits[dest_index + 1] as f32, color_t, src_g) as u8;
                 buffer.bits[dest_index + 2] =
-                    lerp(buffer.bits[dest_index + 2] as f32, dist_from_origin, src_r) as u8;
-                buffer.bits[dest_index + 3] = 255;
+                    lerp(buffer.bits[dest_index + 2] as f32, color_t, src_r) as u8;
+                buffer.bits[dest_index + 3] = src_a as u8;
                 drawn = true;
             }
         }
@@ -347,12 +345,14 @@ fn update_and_render(
         let speed = 3.0 * star.radius as f32 * dt_for_frame;
         star.origin.y += speed;
 
-        // TODO(Fermin): Make stars keep going until they are offscreen
         if star.origin.y.round() as i32 - star.radius >= buffer.height {
             star.origin.x = rng.gen_range(0.0..buffer.width as f32);
             star.radius = rng.gen_range(1..STAR_RADIUS);
             star.origin.y = -star.radius as f32;
         }
+        //NOTE(Fermin): DEBUG, delete
+        //star.origin.x = 0.0;
+        //star.origin.y = 0.0;
     }
 
     // NOTE(Fermin): We erase in the first loop and draw in this one to avoid
