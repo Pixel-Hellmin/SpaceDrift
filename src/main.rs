@@ -24,7 +24,8 @@ const BACKGROUND_COLOR: Color = Color {
     b: 0,
     a: 255,
 };
-const STAR_RADIUS: i32 = 12;
+const MAX_STAR_RADIUS: i32 = 12;
+const MIN_STAR_RADIUS: i32 = 2;
 
 #[derive(Copy, Clone)]
 struct V2 {
@@ -77,19 +78,22 @@ fn draw_rectangle(
     let row_x_index = pos.x.clamp(0.0, buffer.width as f32 - 1.0) as i32;
     let row_y_index = pos.y.clamp(0.0, buffer.height as f32 - 1.0) as i32;
     let mut row: usize = (row_x_index * BYTES_PER_PIXEL + row_y_index * buffer.pitch) as usize;
+
     for y in 0..height {
         let mut drawn = false;
+        let mut dest_index = row;
         for x in 0..width {
             let pixel_x = x + pos.x as i32;
             let pixel_y = y + pos.y as i32;
             if pixel_y >= 0 && pixel_y < buffer.height && pixel_x >= 0 && pixel_x < buffer.width {
                 // NOTE(Fermin): Pixel -> BB GG RR AA
-                let dest_index = row + (x * BYTES_PER_PIXEL) as usize;
                 buffer.bits[dest_index] = color.b;
                 buffer.bits[dest_index + 1] = color.g;
                 buffer.bits[dest_index + 2] = color.r;
                 buffer.bits[dest_index + 3] = color.a;
+
                 drawn = true;
+                dest_index += BYTES_PER_PIXEL as usize;
             }
         }
         if drawn {
@@ -283,14 +287,14 @@ fn draw_star(star: &Star, buffer: &mut Win32OffscreenBuffer) {
     let row_x_index = top_left.x.clamp(0.0, buffer.width as f32 - 1.0) as i32;
     let row_y_index = top_left.y.clamp(0.0, buffer.height as f32 - 1.0) as i32;
     let mut row: usize = (row_x_index * BYTES_PER_PIXEL + row_y_index * buffer.pitch) as usize;
+
     for y in 0..star.radius * 2 {
         let mut drawn = false;
+        let mut dest_index: usize = row;
         for x in 0..star.radius * 2 {
             let pixel_x = top_left.x as i32 + x;
             let pixel_y = top_left.y as i32 + y;
             if pixel_y >= 0 && pixel_y < buffer.height && pixel_x >= 0 && pixel_x < buffer.width {
-                let dest_index: usize = row + (x * BYTES_PER_PIXEL) as usize;
-
                 let pixel_radius = v2_length( V2 { x: pixel_x as f32, y: pixel_y as f32, } - star.origin,);
                 // NOTE(Fermin): We need to clamp because we are iterating on a square,
                 // so some pixels(corners) will be further away than radius of the star
@@ -311,7 +315,9 @@ fn draw_star(star: &Star, buffer: &mut Win32OffscreenBuffer) {
                 buffer.bits[dest_index + 2] =
                     lerp(buffer.bits[dest_index + 2] as f32, color_t, src_r) as u8;
                 buffer.bits[dest_index + 3] = src_a as u8;
+
                 drawn = true;
+                dest_index += BYTES_PER_PIXEL as usize;
             }
         }
         if drawn {
@@ -327,7 +333,6 @@ fn update_and_render(
     rng: &mut rand::rngs::ThreadRng,
     bmp: &LoadedBitmap,
 ) {
-    // TODO(Fermin): Stars are cropped near the left of screen! FIX
     for star in &mut *stars {
         // NOTE(Fermin): Erase previouse frame's star
         draw_rectangle(
@@ -342,17 +347,15 @@ fn update_and_render(
             buffer,
         );
 
-        let speed = 3.0 * star.radius as f32 * dt_for_frame;
+        let speed = 4.0 * star.radius as f32 * dt_for_frame;
         star.origin.y += speed;
 
+        let half_radius = (star.radius / 2) as f32;
         if star.origin.y.round() as i32 - star.radius >= buffer.height {
-            star.origin.x = rng.gen_range(0.0..buffer.width as f32);
-            star.radius = rng.gen_range(1..STAR_RADIUS);
+            star.radius = rng.gen_range(MIN_STAR_RADIUS..MAX_STAR_RADIUS);
+            star.origin.x = rng.gen_range(-half_radius..buffer.width as f32 -half_radius);
             star.origin.y = -star.radius as f32;
         }
-        //NOTE(Fermin): DEBUG, delete
-        //star.origin.x = 0.0;
-        //star.origin.y = 0.0;
     }
 
     // NOTE(Fermin): We erase in the first loop and draw in this one to avoid
@@ -449,13 +452,14 @@ fn main() -> Result<()> {
 
     let mut stars: Vec<Star> = Vec::new();
     for _star in 0..NUMBER_OF_STARS {
-        let size = rng.gen_range(1..STAR_RADIUS);
+        let radius = rng.gen_range(MIN_STAR_RADIUS..MAX_STAR_RADIUS);
+        let half_radius = (radius / 2) as f32;
         stars.push(Star {
             origin: V2 {
-                x: rng.gen_range(0.0..(buffer_width - size) as f32),
-                y: rng.gen_range(0.0..(buffer_height - size) as f32),
+                x: rng.gen_range(-half_radius..buffer_width as f32 - half_radius),
+                y: rng.gen_range(-radius as f32..(buffer_height - radius) as f32),
             },
-            radius: size,
+            radius,
         })
     }
 
