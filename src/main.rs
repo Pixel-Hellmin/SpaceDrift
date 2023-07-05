@@ -16,7 +16,7 @@ use windows::{
     },
 };
 
-const BYTES_PER_PIXEL: i32 = 4;
+pub const BYTES_PER_PIXEL: i32 = 4;
 const NUMBER_OF_STARS: i32 = 40;
 const BACKGROUND_COLOR: Color = Color {
     r: 0,
@@ -375,70 +375,9 @@ fn update_and_render(
 }
 
 fn main() -> Result<()> {
-    // --------------------------------------------------------------------
-    // NOTE(Fermin): Create buffer
-    // --------------------------------------------------------------------
-    // TODO(Fermin): Create InitBuffer routine in window.rs
     let buffer_width = 450;
     let buffer_height = 600;
-    let num_of_pixels = buffer_width * buffer_height * BYTES_PER_PIXEL;
-    let mut buffer = Win32OffscreenBuffer {
-        info: Default::default(),
-        bits: vec![0; num_of_pixels as usize], //NOTE(Fermin): Fill bg with dif color?
-        width: buffer_width,
-        height: buffer_height,
-        pitch: buffer_width * BYTES_PER_PIXEL,
-    };
-    buffer.info.bmiHeader.biWidth = buffer_width;
-    buffer.info.bmiHeader.biHeight = -buffer_height; // - sign so origin is top left
-    buffer.info.bmiHeader.biPlanes = 1;
-    buffer.info.bmiHeader.biBitCount = 32; // 3 bytes for RGB (one each) and one byte for padding cus it needs to be aligned in blocks of 4 bytes
-    buffer.info.bmiHeader.biCompression = BI_RGB;
-    buffer.info.bmiHeader.biSize = (std::mem::size_of::<BITMAPINFOHEADER>())
-        .try_into()
-        .expect("Error computing BITMAPINFOHEADER size");
-
-    // --------------------------------------------------------------------
-    // NOTE(Fermin): Create window
-    // --------------------------------------------------------------------
-    // TODO(Fermin): Create InitWindow routine in window.rs
-    let instance = unsafe { GetModuleHandleA(None)? };
-    let class = WNDCLASSA {
-        style: CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-        hCursor: unsafe { LoadCursorW(HINSTANCE(0), IDC_ARROW).ok().unwrap() },
-        hInstance: instance,
-        lpszClassName: WINDOW_CLASS_NAME,
-        lpfnWndProc: Some(win32_main_window_callback),
-        ..Default::default()
-    };
-    assert_ne!(unsafe { RegisterClassA(&class) }, 0);
-
-    let mut window = Box::new(Window {
-        handle: HWND(0),
-        buffer,
-        window_running: true,
-        refresh_rate: 60,
-    });
-
-    unsafe {
-        let window_tmp = CreateWindowExA(
-            WS_EX_LEFT, // ms: WS_EX_NOREDIRECTIONBITMAP, hmh: 0
-            WINDOW_CLASS_NAME,
-            &s!("Space Drift"),
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            buffer_width + 40,
-            buffer_height + 60,
-            HWND(0),
-            HMENU(0),
-            instance,
-            Some(window.as_mut() as *mut _ as _),
-        )
-        .ok()?;
-        timeBeginPeriod(1);
-        window.refresh_rate = GetDeviceCaps(GetDC(window_tmp), VREFRESH);
-    }
+    let mut window = get_window().ok().expect("Err: at fn call init_window");
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Load test bitmap
