@@ -118,13 +118,12 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
         GetClientRect(window.handle, &mut client_rect);
         let window_width = client_rect.right - client_rect.left;
         let window_height = client_rect.bottom - client_rect.top;
-        let padding = 10;
 
-        PatBlt(device_context, 0, 0, window_width, padding, WHITENESS);
-        PatBlt(device_context, 0, 0, padding, window_height, WHITENESS);
+        PatBlt(device_context, 0, 0, window_width, 0, WHITENESS);
+        PatBlt(device_context, 0, 0, 0, window_height, WHITENESS);
         PatBlt(
             device_context,
-            padding + window.buffer.width,
+            window.buffer.width,
             0,
             window_width,
             window_height,
@@ -133,7 +132,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
         PatBlt(
             device_context,
             0,
-            padding + window.buffer.height,
+            window.buffer.height,
             window_width,
             window_height,
             WHITENESS,
@@ -141,8 +140,8 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
 
         StretchDIBits(
             device_context,
-            padding,
-            padding,
+            0,
+            0,
             window.buffer.width,
             window.buffer.height,
             0,
@@ -157,13 +156,10 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
     }
 }
 
-pub fn get_window() -> Result<Box<Window>> {
+pub fn get_window(buffer_width: i32, buffer_height: i32, name: &PCSTR) -> Result<Box<Window>> {
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create buffer
     // --------------------------------------------------------------------
-    // TODO(Fermin): Create InitBuffer routine in window.rs
-    let buffer_width = 450;
-    let buffer_height = 600;
     let num_of_pixels = buffer_width * buffer_height * crate::BYTES_PER_PIXEL;
     let mut buffer = Win32OffscreenBuffer {
         info: Default::default(),
@@ -184,7 +180,6 @@ pub fn get_window() -> Result<Box<Window>> {
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create window
     // --------------------------------------------------------------------
-    // TODO(Fermin): Create InitWindow routine in window.rs
     let instance = unsafe { GetModuleHandleA(None)? };
     let class = WNDCLASSA {
         style: CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
@@ -207,12 +202,12 @@ pub fn get_window() -> Result<Box<Window>> {
         let window_tmp = CreateWindowExA(
             WS_EX_LEFT, // ms: WS_EX_NOREDIRECTIONBITMAP, hmh: 0
             WINDOW_CLASS_NAME,
-            &s!("Space Drift"),
+            name,
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            buffer_width + 40,
-            buffer_height + 60,
+            buffer_width,
+            buffer_height,
             HWND(0),
             HMENU(0),
             instance,

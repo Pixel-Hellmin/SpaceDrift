@@ -375,9 +375,9 @@ fn update_and_render(
 }
 
 fn main() -> Result<()> {
-    let buffer_width = 450;
-    let buffer_height = 600;
-    let mut window = get_window().ok().expect("Err: at fn call init_window");
+    let mut window = get_window(450, 600, &s!("Space Drift"))
+        .ok()
+        .expect("Err: at fn call init_window");
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Load test bitmap
@@ -395,8 +395,8 @@ fn main() -> Result<()> {
         let half_radius = (radius / 2) as f32;
         stars.push(Star {
             origin: V2 {
-                x: rng.gen_range(-half_radius..buffer_width as f32 - half_radius),
-                y: rng.gen_range(-radius as f32..(buffer_height - radius) as f32),
+                x: rng.gen_range(-half_radius..window.buffer.width as f32 - half_radius),
+                y: rng.gen_range(-radius as f32..(window.buffer.height - radius) as f32),
             },
             radius,
         })
