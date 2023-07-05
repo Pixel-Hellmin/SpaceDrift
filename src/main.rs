@@ -329,6 +329,7 @@ fn update_and_render(
     rng: &mut rand::rngs::ThreadRng,
     bmp: &LoadedBitmap,
 ) {
+    // TODO(Fermin): Stars are cropped near the left of screen! FIX
     for star in &mut *stars {
         // NOTE(Fermin): Erase previouse frame's star
         draw_rectangle(
@@ -347,7 +348,7 @@ fn update_and_render(
         star.origin.y += speed;
 
         // TODO(Fermin): Make stars keep going until they are offscreen
-        if star.origin.y.round() as i32 >= buffer.height {
+        if star.origin.y.round() as i32 - star.radius >= buffer.height {
             star.origin.x = rng.gen_range(0.0..buffer.width as f32);
             star.radius = rng.gen_range(1..STAR_RADIUS);
             star.origin.y = -star.radius as f32;
