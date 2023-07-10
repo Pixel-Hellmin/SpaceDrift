@@ -4,17 +4,7 @@ use crate::window::*;
 use rand::Rng;
 use std::fs::read;
 use std::time::{Duration, Instant};
-use windows::{
-    core::Result,
-    s,
-    Win32::{
-        Foundation::{HINSTANCE, HWND},
-        Graphics::Gdi::*,
-        Media::timeBeginPeriod,
-        System::LibraryLoader::GetModuleHandleA,
-        UI::WindowsAndMessaging::*,
-    },
-};
+use windows::{ core::Result, s };
 
 pub const BYTES_PER_PIXEL: i32 = 4;
 const NUMBER_OF_STARS: i32 = 40;
@@ -295,11 +285,14 @@ fn draw_star(star: &Star, buffer: &mut Win32OffscreenBuffer) {
             let pixel_x = top_left.x as i32 + x;
             let pixel_y = top_left.y as i32 + y;
             if pixel_y >= 0 && pixel_y < buffer.height && pixel_x >= 0 && pixel_x < buffer.width {
-                let pixel_radius = v2_length( V2 { x: pixel_x as f32, y: pixel_y as f32, } - star.origin,);
+                let pixel_radius = v2_length( V2 { x: pixel_x as f32, y: pixel_y as f32, } - star.origin);
                 // NOTE(Fermin): We need to clamp because we are iterating on a square,
                 // so some pixels(corners) will be further away than radius of the star
                 // resulting in a negative opacity
-                let pixel_opacity = (1.0 - (pixel_radius / star.radius as f32)).clamp(0.0, 1.0);
+                let mut pixel_opacity = (1.0 - (pixel_radius / star.radius as f32)).clamp(0.0, 1.0);
+                if pixel_opacity >= 0.85 {
+                    pixel_opacity = 1.0;
+                }
 
                 // TODO(Fermin): Define star color
                 let src_b = 206.0;
@@ -375,12 +368,15 @@ fn update_and_render(
 }
 
 fn main() -> Result<()> {
+    // TODO(Fermin): Make buffer the same size as the window instead of 
+    // fixed values.
     let mut window = get_window(450, 600, &s!("Space Drift"))
         .ok()
         .expect("Err: at fn call init_window");
 
     // --------------------------------------------------------------------
-    // NOTE(Fermin): Load test bitmap
+    // NOTE(Fermin): Load test bitmap. This bitmap is not used since we draw 
+    // stars now. I'll leave it for now in case we load something later.
     // --------------------------------------------------------------------
     let bmp = load_bitmap("art/star.bmp");
 
@@ -421,7 +417,8 @@ fn main() -> Result<()> {
         );
 
         // --------------------------------------------------------------------
-        // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate
+        // NOTE(Fermin): Sleep thread if necessary to sync with monitor refresh rate.
+        // Should this be in Window?
         // --------------------------------------------------------------------
         let target_ms_per_frame = (target_seconds_per_frame * 1000.0) as u128;
         let time_elapsed_since_frame_start = frame_start_instant.elapsed().as_millis();
