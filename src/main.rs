@@ -2,12 +2,12 @@ mod window;
 
 use crate::window::*;
 use rand::Rng;
-use std::fs::read;
+//use std::fs::read;
 use std::time::{Duration, Instant};
 use windows::{ core::Result, s };
 
 pub const BYTES_PER_PIXEL: i32 = 4;
-const NUMBER_OF_STARS: i32 = 40;
+const NUMBER_OF_STARS: i32 = 50;
 const BACKGROUND_COLOR: Color = Color {
     r: 0,
     g: 0,
@@ -97,6 +97,7 @@ fn lerp(a: f32, t: f32, b: f32) -> f32 {
     (1.0 - t) * a + t * b
 }
 
+/*
 fn render_bmp(
     origin: &V2,
     x_axis: V2,
@@ -267,6 +268,7 @@ fn load_bitmap(file: &str) -> LoadedBitmap {
         data_offset,
     }
 }
+*/
 
 fn draw_star(star: &Star, buffer: &mut Win32OffscreenBuffer) {
     let top_left = star.origin
@@ -324,7 +326,6 @@ fn update_and_render(
     dt_for_frame: f32,
     stars: &mut [Star],
     rng: &mut rand::rngs::ThreadRng,
-    bmp: &LoadedBitmap,
 ) {
     for star in &mut *stars {
         // NOTE(Fermin): Erase previouse frame's star
@@ -370,7 +371,7 @@ fn update_and_render(
 fn main() -> Result<()> {
     // TODO(Fermin): Make buffer the same size as the window instead of 
     // fixed values.
-    let mut window = get_window(450, 600, &s!("Space Drift"))
+    let mut window = get_window(1920, 1080, &s!("Space Drift"))
         .ok()
         .expect("Err: at fn call init_window");
 
@@ -378,7 +379,7 @@ fn main() -> Result<()> {
     // NOTE(Fermin): Load test bitmap. This bitmap is not used since we draw 
     // stars now. I'll leave it for now in case we load something later.
     // --------------------------------------------------------------------
-    let bmp = load_bitmap("art/star.bmp");
+    //let bmp = load_bitmap("art/star.bmp");
 
     // --------------------------------------------------------------------
     // NOTE(Fermin): Create collection of stars
@@ -413,7 +414,6 @@ fn main() -> Result<()> {
             last_frame_dur / 1000.0,
             &mut stars,
             &mut rng,
-            &bmp,
         );
 
         // --------------------------------------------------------------------

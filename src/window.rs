@@ -116,6 +116,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
     unsafe {
         let mut client_rect: RECT = Default::default();
         GetClientRect(window.handle, &mut client_rect);
+        /*
         let window_width = client_rect.right - client_rect.left;
         let window_height = client_rect.bottom - client_rect.top;
 
@@ -137,7 +138,7 @@ fn win32_display_buffer_in_window(device_context: HDC, window: &mut Window) {
             window_height,
             WHITENESS,
         );
-
+        */
         StretchDIBits(
             device_context,
             0,
